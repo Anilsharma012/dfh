@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import './MockTestAttempt.css';
@@ -7,7 +7,6 @@ const MockTestAttempt = () => {
   const { testId, attemptId } = useParams();
   const navigate = useNavigate();
   
-  // Sanitize HTML content to prevent XSS attacks
   const sanitizeHtml = (html) => {
     if (!html) return '';
     return DOMPurify.sanitize(html, {
@@ -22,18 +21,22 @@ const MockTestAttempt = () => {
     });
   };
   
-  // Test data and state
   const [testData, setTestData] = useState(null);
   const [currentSection, setCurrentSection] = useState(0);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [responses, setResponses] = useState({});
   const [markedForReview, setMarkedForReview] = useState(new Set());
   const [visitedQuestions, setVisitedQuestions] = useState(new Set([0]));
-  const [timeRemaining, setTimeRemaining] = useState(0);
-  const [sectionTimeRemaining, setSectionTimeRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState(null);
   
-  // UI state
+  const [sectionStates, setSectionStates] = useState([]);
+  const [isResuming, setIsResuming] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [syncError, setSyncError] = useState(null);
+  const [showSectionLockedModal, setShowSectionLockedModal] = useState(false);
+  const [lockedSectionInfo, setLockedSectionInfo] = useState(null);
+  
   const [showCalculator, setShowCalculator] = useState(false);
   const [showScratchPad, setShowScratchPad] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -43,7 +46,6 @@ const MockTestAttempt = () => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // Section result states
   const [showSectionResult, setShowSectionResult] = useState(false);
   const [currentSectionResult, setCurrentSectionResult] = useState(null);
   const [completedSections, setCompletedSections] = useState([]);
@@ -51,55 +53,174 @@ const MockTestAttempt = () => {
   const [finalResult, setFinalResult] = useState(null);
   
   const timerRef = useRef(null);
+  const syncIntervalRef = useRef(null);
+  const currentAttemptIdRef = useRef(attemptId);
+
+  useEffect(() => {
+    currentAttemptIdRef.current = attemptId;
+  }, [attemptId]);
 
   useEffect(() => {
     fetchTestData();
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
   }, []);
 
   useEffect(() => {
-    if (timeRemaining > 0) {
+    if (sectionStates.length > 0 && testData && !showFinalResult) {
       timerRef.current = setInterval(() => {
-        setTimeRemaining(prev => {
-          if (prev <= 1) {
-            handleSubmitTest();
-            return 0;
+        setSectionStates(prevStates => {
+          const currentSectionState = prevStates[currentSection];
+          
+          if (!currentSectionState) return prevStates;
+          
+          if (currentSectionState.isLocked || currentSectionState.isCompleted) {
+            return prevStates;
           }
-          return prev - 1;
-        });
-        
-        setSectionTimeRemaining(prev => {
-          if (prev <= 1 && currentSection < testData?.sections?.length - 1) {
-            handleNextSection();
-            return 3600; // 60 minutes
+          
+          if (currentSectionState.remainingSeconds <= 1) {
+            const newStates = prevStates.map((state, idx) => 
+              idx === currentSection 
+                ? { ...state, remainingSeconds: 0, isCompleted: true, completedAt: new Date().toISOString() }
+                : { ...state }
+            );
+            
+            setTimeout(() => handleSectionTimeUp(), 0);
+            return newStates;
           }
-          return prev > 0 ? prev - 1 : 0;
+          
+          const newStates = prevStates.map((state, idx) => 
+            idx === currentSection 
+              ? { ...state, remainingSeconds: state.remainingSeconds - 1 }
+              : { ...state }
+          );
+          return newStates;
         });
       }, 1000);
     }
     
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [timeRemaining, currentSection, testData]);
+  }, [sectionStates.length, currentSection, testData, showFinalResult]);
+
+  useEffect(() => {
+    if (currentAttemptIdRef.current && testData && !showFinalResult) {
+      syncIntervalRef.current = setInterval(() => {
+        syncProgress();
+      }, 5000);
+    }
+    
+    return () => {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
+  }, [testData, currentSection, currentQuestion, responses, sectionStates, showFinalResult]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      syncProgress();
+      e.preventDefault();
+      e.returnValue = 'Your test progress will be saved. Are you sure you want to leave?';
+      return e.returnValue;
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [responses, sectionStates]);
+
+  const syncProgress = useCallback(async () => {
+    if (!currentAttemptIdRef.current || showFinalResult) return;
+    
+    try {
+      const authToken = localStorage.getItem('authToken');
+      if (!authToken) return;
+      
+      const currentQuestionData = testData?.sections?.[currentSection]?.questions?.[currentQuestion];
+      
+      // Build responses with proper markedForReview state
+      // We need to map question indices to question IDs to check markedForReview
+      const responsesWithReviewState = Object.entries(responses).map(([questionId, selectedAnswer]) => {
+        // Find which question index this questionId corresponds to
+        let isMarked = false;
+        if (testData?.sections) {
+          testData.sections.forEach((section, sectionIdx) => {
+            if (section.questions) {
+              section.questions.forEach((q, qIdx) => {
+                if (q._id === questionId && sectionIdx === currentSection && markedForReview.has(qIdx)) {
+                  isMarked = true;
+                }
+              });
+            }
+          });
+        }
+        return {
+          questionId,
+          selectedAnswer,
+          isAnswered: !!selectedAnswer,
+          isMarkedForReview: isMarked
+        };
+      });
+      
+      const syncData = {
+        currentSectionKey: testData?.sections?.[currentSection]?.name,
+        currentSectionIndex: currentSection,
+        currentQuestionIndex: currentQuestion,
+        currentQuestionId: currentQuestionData?._id,
+        sectionStates: sectionStates,
+        responses: responsesWithReviewState
+      };
+      
+      const response = await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(syncData)
+      });
+      
+      if (response.ok) {
+        const syncResult = await response.json();
+        setLastSyncTime(new Date());
+        setSyncError(null);
+        
+        // CRITICAL: Merge server-validated section states to prevent time manipulation
+        // Server is the source of truth for remaining time and locked status
+        if (syncResult.sectionStates && Array.isArray(syncResult.sectionStates)) {
+          setSectionStates(prevStates => {
+            return syncResult.sectionStates.map((serverState, idx) => {
+              // Always use server-validated remaining time and lock status
+              return {
+                ...serverState,
+                remainingSeconds: serverState.remainingSeconds,
+                isLocked: serverState.isLocked,
+                isCompleted: serverState.isCompleted
+              };
+            });
+          });
+        }
+      } else {
+        console.error('Sync failed:', response.status);
+        setSyncError('Failed to save progress');
+      }
+    } catch (error) {
+      console.error('Error syncing progress:', error);
+      setSyncError('Connection error - progress may not be saved');
+    }
+  }, [testData, currentSection, currentQuestion, responses, sectionStates, markedForReview, showFinalResult]);
 
   const fetchTestData = async () => {
     try {
+      setLoadingError(null);
       const authToken = localStorage.getItem('authToken');
       if (!authToken || authToken === 'null') {
         navigate('/Login');
         return;
       }
 
-      // Check if attemptId exists, if so, try to get existing attempt
       if (attemptId) {
-        // Try to get existing attempt data
         const attemptResponse = await fetch(`/api/mock-tests/attempt/${attemptId}`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -111,16 +232,41 @@ const MockTestAttempt = () => {
           const attemptData = await attemptResponse.json();
           if (attemptData.success) {
             setTestData(attemptData.test);
-            setTimeRemaining(attemptData.timeRemaining || attemptData.test.duration * 60);
-            setSectionTimeRemaining(3600);
-            setResponses(attemptData.responses || {});
+            
+            if (attemptData.attempt?.sectionStates?.length > 0) {
+              setSectionStates(attemptData.attempt.sectionStates);
+              setIsResuming(true);
+              
+              if (attemptData.attempt.currentSectionIndex !== undefined) {
+                setCurrentSection(attemptData.attempt.currentSectionIndex);
+              }
+              if (attemptData.attempt.currentQuestionIndex !== undefined) {
+                setCurrentQuestion(attemptData.attempt.currentQuestionIndex);
+              }
+            } else {
+              initializeSectionStates(attemptData.test);
+            }
+            
+            if (attemptData.responses) {
+              const responsesObj = {};
+              if (Array.isArray(attemptData.responses)) {
+                attemptData.responses.forEach(r => {
+                  if (r.questionId && r.selectedAnswer) {
+                    responsesObj[r.questionId] = r.selectedAnswer;
+                  }
+                });
+              } else {
+                Object.assign(responsesObj, attemptData.responses);
+              }
+              setResponses(responsesObj);
+            }
+            
             setLoading(false);
             return;
           }
         }
       }
 
-      // If no existing attempt or failed to get it, start new
       const response = await fetch(`/api/mock-tests/test/${testId}/start`, {
         method: 'POST',
         headers: {
@@ -131,38 +277,169 @@ const MockTestAttempt = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       if (data.success) {
         setTestData(data.test);
-        setTimeRemaining(data.test.duration * 60); // Convert to seconds
-        setSectionTimeRemaining(3600); // 60 minutes per section
+        
+        if (data.attempt?.sectionStates?.length > 0) {
+          setSectionStates(data.attempt.sectionStates);
+        } else {
+          initializeSectionStates(data.test);
+        }
 
-        // If this is a resume, redirect with correct attempt ID
         if (data.resuming && data.attempt) {
+          setIsResuming(true);
+          currentAttemptIdRef.current = data.attempt._id;
           navigate(`/student/mock-test/${testId}/attempt/${data.attempt._id}`, { replace: true });
-          return;
+          
+          if (data.attempt.currentSectionIndex !== undefined) {
+            setCurrentSection(data.attempt.currentSectionIndex);
+          }
+          if (data.attempt.currentQuestionIndex !== undefined) {
+            setCurrentQuestion(data.attempt.currentQuestionIndex);
+          }
+        } else if (data.attempt) {
+          currentAttemptIdRef.current = data.attempt._id;
+          navigate(`/student/mock-test/${testId}/attempt/${data.attempt._id}`, { replace: true });
         }
       } else {
-        alert(data.message || 'Failed to start test');
-        navigate('/student/mock-tests');
+        setLoadingError(data.message || 'Failed to start test');
       }
     } catch (error) {
       console.error('Error fetching test data:', error);
-      alert('Failed to load test. Please try again.');
-      navigate('/student/mock-tests');
+      setLoadingError(error.message || 'Failed to load test. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const initializeSectionStates = (test) => {
+    if (!test?.sections) return;
+    
+    const states = test.sections.map((section, index) => ({
+      sectionKey: section.name,
+      startedAt: index === 0 ? new Date().toISOString() : null,
+      remainingSeconds: section.duration * 60,
+      isLocked: false,
+      isCompleted: false,
+      completedAt: null
+    }));
+    
+    setSectionStates(states);
+  };
+
+  const handleSectionTimeUp = async () => {
+    const sectionName = testData?.sections?.[currentSection]?.name || 'Current section';
+    
+    // IMMEDIATELY notify server to lock this section (prevents manipulation by pausing JS)
+    try {
+      const authToken = localStorage.getItem('authToken');
+      if (authToken && currentAttemptIdRef.current) {
+        await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/transition`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fromSection: sectionName,
+            toSection: testData?.sections?.[currentSection + 1]?.name || null
+          })
+        });
+      }
+    } catch (error) {
+      console.error('Error locking section on server:', error);
+    }
+    
+    setLockedSectionInfo({
+      sectionName,
+      message: `Time's up for ${sectionName}! Moving to the next section.`
+    });
+    setShowSectionLockedModal(true);
+  };
+
+  const handleSectionLockedContinue = async () => {
+    setShowSectionLockedModal(false);
+    setLockedSectionInfo(null);
+    
+    if (currentSection < testData.sections.length - 1) {
+      const sectionResult = calculateSectionResult(currentSection);
+      setCompletedSections(prev => [...prev, sectionResult]);
+      
+      try {
+        const authToken = localStorage.getItem('authToken');
+        await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/transition-section`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fromSection: testData.sections[currentSection].name,
+            toSection: testData.sections[currentSection + 1].name
+          })
+        });
+      } catch (error) {
+        console.error('Error transitioning section:', error);
+      }
+      
+      setSectionStates(prevStates => 
+        prevStates.map((state, idx) => 
+          idx === currentSection + 1 
+            ? { ...state, startedAt: new Date().toISOString() }
+            : { ...state }
+        )
+      );
+      
+      setCurrentSection(prev => prev + 1);
+      setCurrentQuestion(0);
+      setVisitedQuestions(new Set([0]));
+    } else {
+      handleSubmitTest();
+    }
+  };
+
   const formatTime = (seconds) => {
+    if (seconds === undefined || seconds === null || isNaN(seconds)) {
+      return '00:00:00';
+    }
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getCurrentSectionTime = () => {
+    return sectionStates[currentSection]?.remainingSeconds || 0;
+  };
+
+  const getTotalTimeRemaining = () => {
+    return sectionStates.reduce((total, state) => {
+      if (!state.isCompleted) {
+        return total + (state.remainingSeconds || 0);
+      }
+      return total;
+    }, 0);
+  };
+
+  const isSectionLocked = (sectionIndex) => {
+    const state = sectionStates[sectionIndex];
+    if (!state) return false;
+    return state.isLocked || state.isCompleted || (state.remainingSeconds <= 0);
+  };
+
+  const canNavigateToSection = (sectionIndex) => {
+    if (sectionIndex === currentSection) return true;
+    
+    if (sectionIndex < currentSection) {
+      return !isSectionLocked(sectionIndex);
+    }
+    
+    return false;
   };
 
   const handleQuestionSelect = (questionIndex) => {
@@ -178,7 +455,6 @@ const MockTestAttempt = () => {
         [questionId]: answer
       }));
       
-      // Save response to backend
       saveResponse(questionId, answer);
     }
   };
@@ -186,7 +462,7 @@ const MockTestAttempt = () => {
   const saveResponse = async (questionId, selectedAnswer) => {
     try {
       const authToken = localStorage.getItem('authToken');
-      await fetch(`/api/mock-tests/attempt/${attemptId}/response`, {
+      await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/response`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -246,20 +522,19 @@ const MockTestAttempt = () => {
 
     let answered = 0;
     let markedCount = 0;
-    let visited = visitedQuestions.size; // Current section visited questions
+    let visited = visitedQuestions.size;
 
-    // For current section, use current visitedQuestions state
-    // For other sections, we'd need to track separately (simplified for now)
-
-    sectionQuestions.forEach((questionId, localIndex) => {
+    sectionQuestions.forEach((question, localIndex) => {
+      const questionId = question?._id || question;
       const response = responses[questionId];
-      const globalQuestionIndex = localIndex; // Simplified - using local index
 
-      if (markedForReview.has(globalQuestionIndex)) {
+      if (markedForReview.has(localIndex)) {
         markedCount++;
       }
 
-      if (response && response.trim() !== '') {
+      if (response && response.trim && response.trim() !== '') {
+        answered++;
+      } else if (response) {
         answered++;
       }
     });
@@ -275,41 +550,74 @@ const MockTestAttempt = () => {
       markedForReview: markedCount,
       visited: Math.min(visited, sectionQuestions.length),
       notVisited,
-      correct: 0, // Will be calculated on backend
-      incorrect: 0, // Will be calculated on backend
-      score: answered * 3, // Simplified calculation (no negative marking for now)
+      correct: 0,
+      incorrect: 0,
+      score: answered * 3,
       maxScore: sectionQuestions.length * 3
     };
   };
 
-  const handleNextSection = () => {
-    // Calculate current section result
+  const handleNextSection = async () => {
     const sectionResult = calculateSectionResult(currentSection);
     setCurrentSectionResult(sectionResult);
     setCompletedSections(prev => [...prev, sectionResult]);
+    
+    setSectionStates(prevStates => 
+      prevStates.map((state, idx) => 
+        idx === currentSection 
+          ? { ...state, isCompleted: true, completedAt: new Date().toISOString() }
+          : { ...state }
+      )
+    );
 
-    // Show section result modal
     setShowSectionResult(true);
   };
 
-  const proceedToNextSection = () => {
+  const proceedToNextSection = async () => {
     setShowSectionResult(false);
     setCurrentSectionResult(null);
 
     if (currentSection < testData?.sections?.length - 1) {
+      try {
+        const authToken = localStorage.getItem('authToken');
+        await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/transition-section`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fromSection: testData.sections[currentSection].name,
+            toSection: testData.sections[currentSection + 1].name
+          })
+        });
+      } catch (error) {
+        console.error('Error transitioning section:', error);
+      }
+      
+      setSectionStates(prevStates => 
+        prevStates.map((state, idx) => 
+          idx === currentSection + 1 
+            ? { ...state, startedAt: new Date().toISOString() }
+            : { ...state }
+        )
+      );
+      
       setCurrentSection(prev => prev + 1);
       setCurrentQuestion(0);
       setVisitedQuestions(new Set([0]));
-      setSectionTimeRemaining(3600);
     } else {
-      // Last section completed, proceed to final submission
       handleSubmitTest();
     }
   };
 
   const handleSubmitTest = async () => {
     try {
-      // Calculate final section result if not already calculated
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      
+      await syncProgress();
+
       if (currentSectionResult === null || currentSectionResult.sectionName !== testData.sections[currentSection].name) {
         const sectionResult = calculateSectionResult(currentSection);
         setCompletedSections(prev => {
@@ -325,7 +633,7 @@ const MockTestAttempt = () => {
       }
 
       const authToken = localStorage.getItem('authToken');
-      const response = await fetch(`/api/mock-tests/attempt/${attemptId}/submit`, {
+      const response = await fetch(`/api/mock-tests/attempt/${currentAttemptIdRef.current}/submit`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -335,7 +643,6 @@ const MockTestAttempt = () => {
 
       const data = await response.json();
       if (data.success) {
-        // Calculate combined results
         const allSections = [...completedSections];
         if (!allSections.find(s => s.sectionName === testData.sections[currentSection].name)) {
           allSections.push(calculateSectionResult(currentSection));
@@ -363,7 +670,6 @@ const MockTestAttempt = () => {
 
   const getCurrentQuestion = () => {
     if (!testData?.sections?.[currentSection]?.questions) {
-      console.warn('No questions found for current section:', currentSection);
       return null;
     }
     return testData.sections[currentSection].questions[currentQuestion];
@@ -383,7 +689,6 @@ const MockTestAttempt = () => {
     return 'not-visited';
   };
 
-  // Drawing functions
   const startDrawing = (e) => {
     if (!drawingMode) return;
     setIsDrawing(true);
@@ -417,7 +722,6 @@ const MockTestAttempt = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Calculator functions
   const handleCalculatorInput = (value) => {
     if (value === 'C') {
       setCalculatorValue('0');
@@ -440,6 +744,24 @@ const MockTestAttempt = () => {
       <div className="cat-exam-loading">
         <div className="loading-spinner"></div>
         <p>Loading your test...</p>
+        {isResuming && <p className="resume-notice">Resuming your previous session...</p>}
+      </div>
+    );
+  }
+
+  if (loadingError) {
+    return (
+      <div className="cat-exam-error">
+        <h3>Unable to Load Test</h3>
+        <p>{loadingError}</p>
+        <div className="error-actions">
+          <button onClick={() => window.location.reload()}>
+            Try Again
+          </button>
+          <button onClick={() => navigate('/student/mock-tests')}>
+            Back to Mock Tests
+          </button>
+        </div>
       </div>
     );
   }
@@ -457,10 +779,11 @@ const MockTestAttempt = () => {
 
   const currentQuestionData = getCurrentQuestion();
   const totalQuestions = testData?.sections[currentSection]?.questions?.length || 0;
+  const currentSectionTimeRemaining = getCurrentSectionTime();
+  const isCurrentSectionLocked = isSectionLocked(currentSection);
 
   return (
     <div className="cat-exam-interface">
-      {/* Header */}
       <div className="cat-exam-header">
         <div className="exam-header-left">
           <div className="cat-logos">
@@ -478,40 +801,53 @@ const MockTestAttempt = () => {
           </div>
         </div>
         <div className="exam-header-right">
+          <div className="sync-status">
+            {lastSyncTime && (
+              <span className="sync-indicator success" title={`Last saved: ${lastSyncTime.toLocaleTimeString()}`}>
+                Saved
+              </span>
+            )}
+            {syncError && (
+              <span className="sync-indicator error" title={syncError}>
+                Not saved
+              </span>
+            )}
+          </div>
           <div className="candidate-info">
             <div className="candidate-avatar">
               <span>👤</span>
             </div>
             <div className="candidate-details">
-              <span className="candidate-name">John Smith</span>
+              <span className="candidate-name">Student</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="cat-exam-content">
-        {/* Left Panel - Question */}
         <div className="cat-question-panel">
           <div className="question-header">
             <div className="section-info">
               <h3>Section {currentSection + 1}: {testData.sections[currentSection].name}</h3>
               <span>Question No. {currentQuestion + 1}</span>
+              {isCurrentSectionLocked && (
+                <span className="section-locked-badge">Section Completed</span>
+              )}
             </div>
             <div className="question-navigation">
               <button 
                 className="nav-btn"
                 onClick={handlePreviousQuestion}
-                disabled={currentQuestion === 0}
+                disabled={currentQuestion === 0 || isCurrentSectionLocked}
               >
-                ← Previous
+                Previous
               </button>
               <button 
                 className="nav-btn"
                 onClick={handleNextQuestion}
-                disabled={currentQuestion === totalQuestions - 1}
+                disabled={currentQuestion === totalQuestions - 1 || isCurrentSectionLocked}
               >
-                Next →
+                Next
               </button>
             </div>
           </div>
@@ -532,7 +868,6 @@ const MockTestAttempt = () => {
             <div className="question-options">
               {currentQuestionData?.options ? (
                 (() => {
-                  // Handle options as object {A: "...", B: "...", C: "...", D: "..."}
                   if (typeof currentQuestionData.options === 'object' && !Array.isArray(currentQuestionData.options)) {
                     return ['A', 'B', 'C', 'D'].map((optionKey) => {
                       const optionText = currentQuestionData.options[optionKey];
@@ -542,13 +877,14 @@ const MockTestAttempt = () => {
                       const isSelected = responses[questionId] === optionKey;
 
                       return (
-                        <label key={optionKey} className={`option-label ${isSelected ? 'selected' : ''}`}>
+                        <label key={optionKey} className={`option-label ${isSelected ? 'selected' : ''} ${isCurrentSectionLocked ? 'disabled' : ''}`}>
                           <input
                             type="radio"
                             name={`question-${questionId}`}
                             value={optionKey}
                             checked={isSelected}
                             onChange={() => handleAnswerSelect(optionKey)}
+                            disabled={isCurrentSectionLocked}
                           />
                           <span className="option-indicator">{optionKey}</span>
                           <span className="option-text">
@@ -559,25 +895,24 @@ const MockTestAttempt = () => {
                     }).filter(Boolean);
                   }
                   
-                  // Handle options as array with { label, value } format (database format)
                   if (Array.isArray(currentQuestionData.options)) {
                     return currentQuestionData.options.map((option, index) => {
                       const questionId = currentQuestionData._id;
                       
-                      // Handle { label, value } format from database
                       if (typeof option === 'object' && option.label && option.value !== undefined) {
                         const optionLabel = option.label;
                         const optionText = option.value;
                         const isSelected = responses[questionId] === optionLabel;
 
                         return (
-                          <label key={index} className={`option-label ${isSelected ? 'selected' : ''}`}>
+                          <label key={index} className={`option-label ${isSelected ? 'selected' : ''} ${isCurrentSectionLocked ? 'disabled' : ''}`}>
                             <input
                               type="radio"
                               name={`question-${questionId}`}
                               value={optionLabel}
                               checked={isSelected}
                               onChange={() => handleAnswerSelect(optionLabel)}
+                              disabled={isCurrentSectionLocked}
                             />
                             <span className="option-indicator">{optionLabel}</span>
                             <span className="option-text">
@@ -587,19 +922,19 @@ const MockTestAttempt = () => {
                         );
                       }
                       
-                      // Handle legacy { optionText } format or plain string
-                      const optionLabel = String.fromCharCode(65 + index); // A, B, C, D
+                      const optionLabel = String.fromCharCode(65 + index);
                       const optionText = typeof option === 'object' ? (option.optionText || option.value || '') : option;
                       const isSelected = responses[questionId] === optionLabel || responses[questionId] === optionText;
 
                       return (
-                        <label key={index} className={`option-label ${isSelected ? 'selected' : ''}`}>
+                        <label key={index} className={`option-label ${isSelected ? 'selected' : ''} ${isCurrentSectionLocked ? 'disabled' : ''}`}>
                           <input
                             type="radio"
                             name={`question-${questionId}`}
                             value={optionLabel}
                             checked={isSelected}
                             onChange={() => handleAnswerSelect(optionLabel)}
+                            disabled={isCurrentSectionLocked}
                           />
                           <span className="option-indicator">{optionLabel}</span>
                           <span className="option-text">
@@ -622,58 +957,71 @@ const MockTestAttempt = () => {
           </div>
 
           <div className="question-actions">
-            <button className="action-btn secondary" onClick={handleClearResponse}>
+            <button 
+              className="action-btn secondary" 
+              onClick={handleClearResponse}
+              disabled={isCurrentSectionLocked}
+            >
               Clear Response
             </button>
             <button 
               className={`action-btn ${markedForReview.has(currentQuestion) ? 'marked' : 'secondary'}`}
               onClick={handleMarkForReview}
+              disabled={isCurrentSectionLocked}
             >
               {markedForReview.has(currentQuestion) ? 'Unmark for Review' : 'Mark for Review & Next'}
             </button>
-            <button className="action-btn primary" onClick={handleNextQuestion}>
+            <button 
+              className="action-btn primary" 
+              onClick={handleNextQuestion}
+              disabled={isCurrentSectionLocked}
+            >
               Save & Next
             </button>
           </div>
         </div>
 
-        {/* Right Panel - Question Palette & Tools */}
         <div className="cat-sidebar-panel">
-          {/* Timer */}
           <div className="timer-section">
             <div className="timer-item">
-              <span className="timer-label">Time Left</span>
-              <span className="timer-value">{formatTime(timeRemaining)}</span>
+              <span className="timer-label">Total Time Left</span>
+              <span className="timer-value">{formatTime(getTotalTimeRemaining())}</span>
             </div>
-            <div className="timer-item">
+            <div className={`timer-item section-timer ${currentSectionTimeRemaining < 300 ? 'warning' : ''} ${currentSectionTimeRemaining < 60 ? 'critical' : ''}`}>
               <span className="timer-label">Section Time</span>
-              <span className="timer-value">{formatTime(sectionTimeRemaining)}</span>
+              <span className="timer-value">{formatTime(currentSectionTimeRemaining)}</span>
             </div>
           </div>
 
-          {/* Tools */}
+          {currentSectionTimeRemaining < 300 && currentSectionTimeRemaining > 0 && (
+            <div className="time-warning-banner">
+              {currentSectionTimeRemaining < 60 
+                ? 'Less than 1 minute remaining in this section!' 
+                : `${Math.ceil(currentSectionTimeRemaining / 60)} minutes remaining in this section`}
+            </div>
+          )}
+
           <div className="tools-section">
             <button 
               className="tool-btn"
               onClick={() => setShowInstructions(true)}
             >
-              📋 Instructions
+              Instructions
             </button>
             <button 
               className="tool-btn"
               onClick={() => setShowCalculator(!showCalculator)}
             >
-              🧮 Calculator
+              Calculator
             </button>
             <button 
               className="tool-btn"
               onClick={() => setShowScratchPad(!showScratchPad)}
             >
-              📝 Scratch Pad
+              Scratch Pad
             </button>
           </div>
 
-          {/* Question Status Legend */}
           <div className="status-legend">
             <h4>Question Status</h4>
             <div className="legend-items">
@@ -700,7 +1048,6 @@ const MockTestAttempt = () => {
             </div>
           </div>
 
-          {/* Question Palette */}
           <div className="question-palette">
             <h4>Choose a Question</h4>
             <div className="palette-grid">
@@ -710,6 +1057,7 @@ const MockTestAttempt = () => {
                     key={index}
                     className={`palette-btn ${getQuestionStatus(index)} ${currentQuestion === index ? 'current' : ''}`}
                     onClick={() => handleQuestionSelect(index)}
+                    disabled={isCurrentSectionLocked}
                   >
                     {index + 1}
                   </button>
@@ -720,28 +1068,41 @@ const MockTestAttempt = () => {
             </div>
           </div>
 
-          {/* Section Navigation */}
           <div className="section-navigation">
             <div className="section-tabs">
-              {testData.sections.map((section, index) => (
-                <button
-                  key={index}
-                  className={`section-tab ${currentSection === index ? 'active' : ''}`}
-                  onClick={() => {
-                    setCurrentSection(index);
-                    setCurrentQuestion(0);
-                    setVisitedQuestions(new Set([0]));
-                  }}
-                >
-                  {section.name}
-                </button>
-              ))}
+              {testData.sections.map((section, index) => {
+                const isLocked = isSectionLocked(index);
+                const canNavigate = canNavigateToSection(index);
+                
+                return (
+                  <button
+                    key={index}
+                    className={`section-tab ${currentSection === index ? 'active' : ''} ${isLocked ? 'locked' : ''} ${!canNavigate ? 'disabled' : ''}`}
+                    onClick={() => {
+                      if (canNavigate && !isLocked) {
+                        setCurrentSection(index);
+                        setCurrentQuestion(0);
+                        setVisitedQuestions(new Set([0]));
+                      }
+                    }}
+                    disabled={!canNavigate || (isLocked && index !== currentSection)}
+                    title={isLocked ? 'Section completed' : (index > currentSection ? 'Complete current section first' : section.name)}
+                  >
+                    {section.name}
+                    {isLocked && <span className="lock-icon">Completed</span>}
+                  </button>
+                );
+              })}
             </div>
             
             <div className="section-actions">
               {currentSection < testData.sections.length - 1 ? (
-                <button className="section-btn primary" onClick={handleNextSection}>
-                  Next Section →
+                <button 
+                  className="section-btn primary" 
+                  onClick={handleNextSection}
+                  disabled={isCurrentSectionLocked}
+                >
+                  Submit Section & Continue
                 </button>
               ) : (
                 <button className="section-btn danger" onClick={handleSubmitTest}>
@@ -749,11 +1110,18 @@ const MockTestAttempt = () => {
                 </button>
               )}
             </div>
+            
+            <div className="section-guidance">
+              <p>
+                {currentSection < testData.sections.length - 1 
+                  ? 'You can submit this section early or wait for the timer to complete.'
+                  : 'This is the final section. Submit when ready.'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Calculator Modal */}
       {showCalculator && (
         <div className="modal-overlay">
           <div className="calculator-modal">
@@ -791,7 +1159,6 @@ const MockTestAttempt = () => {
         </div>
       )}
 
-      {/* Scratch Pad Modal */}
       {showScratchPad && (
         <div className="modal-overlay">
           <div className="scratchpad-modal">
@@ -802,13 +1169,13 @@ const MockTestAttempt = () => {
                   className={`mode-btn ${!drawingMode ? 'active' : ''}`}
                   onClick={() => setDrawingMode(false)}
                 >
-                  📝 Text
+                  Text
                 </button>
                 <button
                   className={`mode-btn ${drawingMode ? 'active' : ''}`}
                   onClick={() => setDrawingMode(true)}
                 >
-                  ✏️ Draw
+                  Draw
                 </button>
               </div>
               <button onClick={() => setShowScratchPad(false)}>×</button>
@@ -845,7 +1212,6 @@ const MockTestAttempt = () => {
         </div>
       )}
 
-      {/* Instructions Modal */}
       {showInstructions && (
         <div className="modal-overlay">
           <div className="instructions-modal">
@@ -854,26 +1220,65 @@ const MockTestAttempt = () => {
               <button onClick={() => setShowInstructions(false)}>×</button>
             </div>
             <div className="instructions-content">
-              {Array.isArray(testData.instructions) && testData.instructions.length > 0 ? (
-                testData.instructions.map((instruction, index) => (
-                  <p key={index}>
-                    {typeof instruction === 'object' ? JSON.stringify(instruction) : String(instruction)}
-                  </p>
-                ))
-              ) : (
-                <p>No instructions available</p>
+              <div className="instruction-section">
+                <h5>Section-wise Time Management</h5>
+                <ul>
+                  <li>Each section has its own time limit that cannot be extended.</li>
+                  <li>When section time expires, you will automatically move to the next section.</li>
+                  <li>You cannot return to a section once its time has expired.</li>
+                  <li>You may submit a section early if you finish before time expires.</li>
+                </ul>
+              </div>
+              <div className="instruction-section">
+                <h5>Progress Saving</h5>
+                <ul>
+                  <li>Your progress is automatically saved every few seconds.</li>
+                  <li>If you lose connection, you can resume from where you left off.</li>
+                  <li>Look for the "Saved" indicator in the top right corner.</li>
+                </ul>
+              </div>
+              {Array.isArray(testData.instructions) && testData.instructions.length > 0 && (
+                <div className="instruction-section">
+                  <h5>Additional Instructions</h5>
+                  {testData.instructions.map((instruction, index) => (
+                    <p key={index}>
+                      {typeof instruction === 'object' ? JSON.stringify(instruction) : String(instruction)}
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Section Result Modal */}
+      {showSectionLockedModal && lockedSectionInfo && (
+        <div className="modal-overlay">
+          <div className="section-locked-modal">
+            <div className="section-locked-header">
+              <h3>Section Time Complete</h3>
+            </div>
+            <div className="section-locked-content">
+              <div className="time-up-icon">⏰</div>
+              <p>{lockedSectionInfo.message}</p>
+              <p className="section-locked-note">
+                Your answers for this section have been saved. You cannot return to this section.
+              </p>
+            </div>
+            <div className="section-locked-actions">
+              <button className="section-btn primary" onClick={handleSectionLockedContinue}>
+                {currentSection < testData.sections.length - 1 ? 'Continue to Next Section' : 'View Results'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showSectionResult && currentSectionResult && (
         <div className="modal-overlay">
           <div className="section-result-modal">
             <div className="section-result-header">
-              <h3>Section Result - {currentSectionResult.sectionName}</h3>
+              <h3>Section Complete - {currentSectionResult.sectionName}</h3>
             </div>
             <div className="section-result-content">
               <div className="result-summary">
@@ -910,11 +1315,15 @@ const MockTestAttempt = () => {
                   </div>
                 </div>
               </div>
+              
+              <div className="section-transition-note">
+                <p><strong>Note:</strong> Once you proceed, you cannot return to this section.</p>
+              </div>
             </div>
             <div className="section-result-actions">
               {currentSection < testData?.sections?.length - 1 ? (
                 <button className="result-btn primary" onClick={proceedToNextSection}>
-                  Continue to Next Section →
+                  Continue to Next Section
                 </button>
               ) : (
                 <button className="result-btn primary" onClick={proceedToNextSection}>
@@ -926,7 +1335,6 @@ const MockTestAttempt = () => {
         </div>
       )}
 
-      {/* Final Result Modal */}
       {showFinalResult && finalResult && (
         <div className="modal-overlay">
           <div className="final-result-modal">

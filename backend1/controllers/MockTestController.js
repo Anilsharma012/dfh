@@ -437,7 +437,7 @@ const saveResponse = async (req, res) => {
     const attempt = await MockTestAttempt.findOne({
       _id: attemptId,
       userId: userId
-    });
+    }).populate('testPaperId');
 
     if (!attempt) {
       return res.status(404).json({
@@ -451,6 +451,79 @@ const saveResponse = async (req, res) => {
         success: false,
         message: 'Cannot modify completed test'
       });
+    }
+    
+    // SERVER-SIDE TIME ENFORCEMENT: Check if the question's section has expired
+    const test = attempt.testPaperId;
+    if (test && test.sections) {
+      const currentTime = new Date();
+      
+      // Find which section this question belongs to
+      // First try looking in section.questions array (ObjectIds)
+      let questionSection = test.sections.find(section => 
+        section.questions?.some(q => q.toString() === questionId)
+      );
+      
+      // If not found in section.questions, query MockTestQuestion directly
+      if (!questionSection) {
+        const questionDoc = await MockTestQuestion.findById(questionId).select('section');
+        if (questionDoc && questionDoc.section) {
+          questionSection = test.sections.find(section => section.name === questionDoc.section);
+        }
+      }
+      
+      // SECURITY: If we can't determine the section, REJECT the response (fail-closed)
+      if (!questionSection) {
+        console.log(`⚠️ Rejected response: cannot determine section for question ${questionId}`);
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot save response: question section not found',
+          error: 'SECTION_NOT_FOUND'
+        });
+      }
+      
+      // Section found - check if it's locked
+      // Find the section state for this section
+      const sectionState = attempt.sectionStates?.find(s => s.sectionKey === questionSection.name);
+      
+      // Check if section is already locked
+      if (sectionState?.isLocked || sectionState?.isCompleted) {
+        console.log(`⚠️ Rejected response: section ${questionSection.name} is locked`);
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot save response: section time has expired',
+          sectionLocked: true
+        });
+      }
+      
+      // If section was started, calculate if it has expired
+      if (sectionState?.startedAt) {
+        const sectionStartTime = new Date(sectionState.startedAt);
+        const sectionTotalSeconds = (questionSection.duration || 60) * 60;
+        const elapsedSeconds = Math.floor((currentTime - sectionStartTime) / 1000);
+        const serverRemaining = Math.max(0, sectionTotalSeconds - elapsedSeconds);
+        
+        // If time has expired, lock the section and reject the response
+        if (serverRemaining === 0) {
+          console.log(`⚠️ Rejected response: section ${questionSection.name} has expired (server-side calculation)`);
+          
+          // Update sectionState to locked
+          const stateIndex = attempt.sectionStates?.findIndex(s => s.sectionKey === questionSection.name);
+          if (stateIndex >= 0) {
+            attempt.sectionStates[stateIndex].isLocked = true;
+            attempt.sectionStates[stateIndex].isCompleted = true;
+            attempt.sectionStates[stateIndex].remainingSeconds = 0;
+            attempt.sectionStates[stateIndex].completedAt = currentTime.toISOString();
+            await attempt.save();
+          }
+          
+          return res.status(403).json({
+            success: false,
+            message: 'Cannot save response: section time has expired',
+            sectionLocked: true
+          });
+        }
+      }
     }
 
     // Find existing response or create new one
@@ -527,26 +600,196 @@ const syncProgress = async (req, res) => {
       });
     }
 
-    // Update session state
-    if (currentSectionIndex !== undefined) attempt.currentSectionIndex = currentSectionIndex;
-    if (currentQuestionIndex !== undefined) attempt.currentQuestionIndex = currentQuestionIndex;
-    if (currentSectionKey) attempt.currentSectionKey = currentSectionKey;
-    if (sectionStates && Array.isArray(sectionStates)) attempt.sectionStates = sectionStates;
+    // Server-side validation for section states - STRICT enforcement, don't trust client data
+    const currentTime = new Date();
+    const test = await MockTest.findById(attempt.testPaperId);
     
-    // Update responses if provided
+    if (!test) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test not found'
+      });
+    }
+    
+    // STRICT SECTION NAVIGATION ENFORCEMENT
+    // Client cannot jump to sections that haven't been properly started via transitionSection
+    const serverCurrentSectionKey = attempt.currentSectionKey;
+    const serverCurrentSectionIdx = attempt.currentSectionIndex || 0;
+    
+    // Validate client's claimed section is allowed
+    if (currentSectionKey && currentSectionKey !== serverCurrentSectionKey) {
+      // Client trying to switch sections - check if this is valid
+      const targetSectionState = attempt.sectionStates?.find(s => s.sectionKey === currentSectionKey);
+      const targetSectionIdx = test.sections.findIndex(s => s.name === currentSectionKey);
+      
+      // Can only navigate to:
+      // 1. Section that was previously started (has startedAt)
+      // 2. Section index <= current index (back navigation only, forward requires transitionSection)
+      // 3. Section that isn't locked (unless viewing completed sections is allowed)
+      const isValidBackNav = targetSectionState?.startedAt && targetSectionIdx <= serverCurrentSectionIdx;
+      const isLockedSection = targetSectionState?.isLocked || targetSectionState?.isCompleted;
+      
+      if (!isValidBackNav) {
+        console.log(`⚠️ Rejected section jump from ${serverCurrentSectionKey} to ${currentSectionKey}`);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid section navigation. Use section transition API to advance.',
+          currentSectionKey: serverCurrentSectionKey
+        });
+      }
+      
+      // If navigating to a locked section, they can view but not modify responses
+      if (isLockedSection) {
+        console.log(`ℹ️ Client viewing locked section ${currentSectionKey} (read-only)`);
+      }
+    }
+    
+    // Update session state (only within allowed sections)
+    if (currentQuestionIndex !== undefined) attempt.currentQuestionIndex = currentQuestionIndex;
+    // Only update section if validated above
+    if (currentSectionIndex !== undefined && currentSectionKey === serverCurrentSectionKey) {
+      attempt.currentSectionIndex = currentSectionIndex;
+    }
+    if (currentSectionKey && currentSectionKey === serverCurrentSectionKey) {
+      attempt.currentSectionKey = currentSectionKey;
+    }
+    
+    // Build validated section states based on SERVER-SIDE section definitions only
+    // Ignore unknown sections from client, enforce timing strictly
+    const validatedStates = test.sections.map((sectionDef, idx) => {
+      // Get existing server state by section name (not by index)
+      const existingState = attempt.sectionStates?.find(s => s.sectionKey === sectionDef.name);
+      // Get client state if provided (matched by section name, not index)
+      const clientState = sectionStates?.find(s => s.sectionKey === sectionDef.name);
+      
+      // If section is already locked/completed server-side, ALWAYS keep it locked
+      if (existingState?.isLocked || existingState?.isCompleted) {
+        return {
+          sectionKey: sectionDef.name,
+          startedAt: existingState.startedAt,
+          remainingSeconds: 0,
+          isLocked: true,
+          isCompleted: true,
+          completedAt: existingState.completedAt
+        };
+      }
+      
+      // Use server's startedAt, ignore client's startedAt to prevent manipulation
+      const startedAt = existingState?.startedAt;
+      
+      if (startedAt) {
+        // Calculate remaining time strictly from server data
+        const sectionStartTime = new Date(startedAt);
+        const sectionTotalSeconds = sectionDef.duration * 60;
+        const elapsedSeconds = Math.floor((currentTime - sectionStartTime) / 1000);
+        const serverCalculatedRemaining = Math.max(0, sectionTotalSeconds - elapsedSeconds);
+        
+        // If time has expired server-side, lock the section regardless of client state
+        if (serverCalculatedRemaining === 0) {
+          return {
+            sectionKey: sectionDef.name,
+            startedAt: startedAt,
+            remainingSeconds: 0,
+            isCompleted: true,
+            isLocked: true,
+            completedAt: currentTime.toISOString()
+          };
+        }
+        
+        // Return server-calculated remaining (ignore client's remaining time completely)
+        return {
+          sectionKey: sectionDef.name,
+          startedAt: startedAt,
+          remainingSeconds: serverCalculatedRemaining,
+          isLocked: false,
+          isCompleted: false,
+          completedAt: null
+        };
+      }
+      
+      // Section not started yet - preserve existing state or create new
+      if (existingState) {
+        return existingState;
+      }
+      
+      return {
+        sectionKey: sectionDef.name,
+        startedAt: null,
+        remainingSeconds: sectionDef.duration * 60,
+        isLocked: false,
+        isCompleted: false,
+        completedAt: null
+      };
+    });
+    
+    attempt.sectionStates = validatedStates;
+    
+    // CRITICAL: Identify which sections are now expired/locked based on server calculation
+    // Build a set of expired section keys for response filtering
+    const expiredSectionKeys = new Set(
+      validatedStates.filter(s => s.isLocked || s.isCompleted).map(s => s.sectionKey)
+    );
+    
+    // Update responses if provided - only update selectedAnswer, preserve other fields
+    // REJECT responses for questions in expired/locked sections
     if (responses && Array.isArray(responses)) {
       for (const resp of responses) {
+        if (!resp.questionId) continue;
+        
+        // Find which section this question belongs to
+        // Method 1: Try to find in section.questions (ObjectIds)
+        let questionSectionName = null;
+        for (const section of test.sections) {
+          if (section.questions?.some(q => q.toString() === resp.questionId)) {
+            questionSectionName = section.name;
+            break;
+          }
+        }
+        
+        // Method 2: If not found, query MockTestQuestion directly
+        if (!questionSectionName) {
+          const questionDoc = await MockTestQuestion.findById(resp.questionId).select('section');
+          if (questionDoc && questionDoc.section) {
+            questionSectionName = questionDoc.section;
+          }
+        }
+        
+        // SECURITY: If we can't determine the section, REJECT the response (fail-closed)
+        if (!questionSectionName) {
+          console.log(`⚠️ Rejected response: cannot determine section for question ${resp.questionId}`);
+          continue; // Skip this response - fail-closed security
+        }
+        
+        // Reject response if section is expired/locked
+        if (expiredSectionKeys.has(questionSectionName)) {
+          console.log(`⚠️ Rejected response for expired section ${questionSectionName}, question ${resp.questionId}`);
+          continue; // Skip this response
+        }
+        
         const existingIndex = attempt.responses.findIndex(
-          r => r.questionId.toString() === resp.questionId
+          r => r.questionId && r.questionId.toString() === resp.questionId
         );
         
         if (existingIndex >= 0) {
-          attempt.responses[existingIndex] = {
-            ...attempt.responses[existingIndex].toObject(),
-            ...resp
-          };
-        } else {
-          attempt.responses.push(resp);
+          // Only update specific fields, preserve existing response data
+          if (resp.selectedAnswer !== undefined) {
+            attempt.responses[existingIndex].selectedAnswer = resp.selectedAnswer;
+            attempt.responses[existingIndex].isAnswered = !!resp.selectedAnswer;
+          }
+          if (resp.isMarkedForReview !== undefined) {
+            attempt.responses[existingIndex].isMarkedForReview = resp.isMarkedForReview;
+          }
+          attempt.responses[existingIndex].answeredAt = new Date();
+        } else if (resp.selectedAnswer) {
+          // Only add new response if there's actually an answer
+          attempt.responses.push({
+            questionId: resp.questionId,
+            selectedAnswer: resp.selectedAnswer,
+            isAnswered: true,
+            isMarkedForReview: resp.isMarkedForReview || false,
+            isVisited: true,
+            answeredAt: new Date()
+          });
         }
       }
     }
@@ -560,7 +803,9 @@ const syncProgress = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Progress synced successfully',
-      lastSyncedAt: attempt.lastSyncedAt
+      lastSyncedAt: attempt.lastSyncedAt,
+      // Return server-validated section states so frontend can sync
+      sectionStates: attempt.sectionStates
     });
   } catch (error) {
     console.error('❌ Error syncing progress:', error);
@@ -576,10 +821,13 @@ const syncProgress = async (req, res) => {
 const transitionSection = async (req, res) => {
   try {
     const { attemptId } = req.params;
-    const { currentSectionKey, nextSectionKey, sectionTimeSpent } = req.body;
+    // Support both payload formats (fromSection/toSection and currentSectionKey/nextSectionKey)
+    const fromSection = req.body.fromSection || req.body.currentSectionKey;
+    const toSection = req.body.toSection || req.body.nextSectionKey;
+    const sectionTimeSpent = req.body.sectionTimeSpent;
     const userId = req.user.id;
 
-    console.log(`🔀 Section transition for attempt: ${attemptId} from ${currentSectionKey} to ${nextSectionKey}`);
+    console.log(`🔀 Section transition for attempt: ${attemptId} from ${fromSection} to ${toSection}`);
 
     const attempt = await MockTestAttempt.findOne({
       _id: attemptId,
@@ -601,18 +849,16 @@ const transitionSection = async (req, res) => {
     }
 
     // Find and update current section state
-    let currentSectionState = attempt.sectionStates.find(s => s.sectionKey === currentSectionKey);
+    let currentSectionState = attempt.sectionStates.find(s => s.sectionKey === fromSection);
     if (currentSectionState) {
       currentSectionState.isCompleted = true;
       currentSectionState.completedAt = new Date();
       currentSectionState.isLocked = true;
-      if (sectionTimeSpent) {
-        currentSectionState.remainingSeconds = 0;
-      }
+      currentSectionState.remainingSeconds = 0;
     } else {
       // Create section state if it doesn't exist
       attempt.sectionStates.push({
-        sectionKey: currentSectionKey,
+        sectionKey: fromSection,
         isCompleted: true,
         completedAt: new Date(),
         isLocked: true,
@@ -622,9 +868,9 @@ const transitionSection = async (req, res) => {
 
     // Find next section index
     const test = attempt.testPaperId;
-    const nextSectionIndex = test.sections.findIndex(s => s.name === nextSectionKey);
+    const nextSectionIndex = test.sections.findIndex(s => s.name === toSection);
     
-    if (nextSectionIndex === -1 && nextSectionKey) {
+    if (nextSectionIndex === -1 && toSection) {
       return res.status(400).json({
         success: false,
         message: 'Next section not found'
@@ -632,13 +878,13 @@ const transitionSection = async (req, res) => {
     }
 
     // Initialize next section state if exists
-    if (nextSectionKey) {
+    if (toSection) {
       const nextSection = test.sections[nextSectionIndex];
-      let nextSectionState = attempt.sectionStates.find(s => s.sectionKey === nextSectionKey);
+      let nextSectionState = attempt.sectionStates.find(s => s.sectionKey === toSection);
       
       if (!nextSectionState) {
         attempt.sectionStates.push({
-          sectionKey: nextSectionKey,
+          sectionKey: toSection,
           startedAt: new Date(),
           remainingSeconds: nextSection.duration * 60, // Convert minutes to seconds
           isLocked: false,
@@ -649,7 +895,7 @@ const transitionSection = async (req, res) => {
         nextSectionState.remainingSeconds = nextSection.duration * 60;
       }
 
-      attempt.currentSectionKey = nextSectionKey;
+      attempt.currentSectionKey = toSection;
       attempt.currentSectionIndex = nextSectionIndex;
       attempt.currentQuestionIndex = 0;
     }
@@ -872,6 +1118,68 @@ const getAttemptData = async (req, res) => {
     const totalDurationMinutes = attempt.totalDuration;
     const remainingMinutes = Math.max(0, totalDurationMinutes - elapsedMinutes);
 
+    // Server-side validation for expired sections on resume
+    // Validate sectionStates based on startedAt + duration to enforce strict time limits
+    let validatedSectionStates = attempt.sectionStates || [];
+    let needsSave = false;
+    
+    if (validatedSectionStates.length > 0) {
+      validatedSectionStates = validatedSectionStates.map((state) => {
+        // Find section by sectionKey instead of index to be more robust
+        const sectionDef = test.sections.find(s => s.name === state.sectionKey);
+        
+        // If section is already marked as completed/locked, keep it that way
+        if (state.isCompleted || state.isLocked) {
+          return {
+            ...state,
+            remainingSeconds: 0,
+            isLocked: true,
+            isCompleted: true
+          };
+        }
+        
+        // If section was started, check if it has expired
+        if (state.startedAt && sectionDef) {
+          const sectionStartTime = new Date(state.startedAt);
+          const sectionDuration = sectionDef.duration || 60; // minutes
+          const sectionElapsedSeconds = Math.floor((currentTime - sectionStartTime) / 1000);
+          const sectionTotalSeconds = sectionDuration * 60;
+          const calculatedRemaining = Math.max(0, sectionTotalSeconds - sectionElapsedSeconds);
+          
+          // If time has expired, lock the section regardless of stored state
+          if (calculatedRemaining === 0) {
+            needsSave = true;
+            return {
+              ...state,
+              remainingSeconds: 0,
+              isCompleted: true,
+              isLocked: true,
+              completedAt: state.completedAt || currentTime.toISOString()
+            };
+          }
+          
+          // Use the lesser of stored and calculated remaining (prevent time manipulation)
+          const validatedRemaining = Math.min(state.remainingSeconds || sectionTotalSeconds, calculatedRemaining);
+          if (validatedRemaining !== state.remainingSeconds) {
+            needsSave = true;
+          }
+          return {
+            ...state,
+            remainingSeconds: validatedRemaining
+          };
+        }
+        
+        return state;
+      });
+      
+      // Save updated section states if modified
+      if (needsSave) {
+        attempt.sectionStates = validatedSectionStates;
+        await attempt.save();
+        console.log('🔒 Updated section states with server-validated times');
+      }
+    }
+
     // Convert responses to frontend format
     const responseMap = {};
     attempt.responses.forEach(resp => {
@@ -879,6 +1187,12 @@ const getAttemptData = async (req, res) => {
         responseMap[resp.questionId.toString()] = resp.selectedAnswer;
       }
     });
+
+    // Include validated section states in the response
+    const attemptWithValidatedStates = {
+      ...attempt.toObject(),
+      sectionStates: validatedSectionStates
+    };
 
     console.log('✅ Attempt data retrieved successfully');
     res.status(200).json({
@@ -914,7 +1228,7 @@ const getAttemptData = async (req, res) => {
           return [test.instructions];
         })()
       },
-      attempt,
+      attempt: attemptWithValidatedStates,
       timeRemaining: remainingMinutes * 60, // Convert to seconds
       responses: responseMap
     });
