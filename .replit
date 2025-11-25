@@ -64,3 +64,12 @@ externalPort = 5000
 [deployment]
 deploymentTarget = "vm"
 run = ["bash", "-c", "cd Frontend1 && npm run dev:full"]
+
+[userenv]
+
+[userenv.shared]
+PORT = "3001"
+REACT_APP_BACKEND_URL = "http://localhost:5000/api/v1"
+EMAIL = "ethan2233har@gmail.com"
+KARIX_SENDER_ID = "TATHGT"
+RAZORPAY_KEY_ID = "rzp_test_RZC3Oil77mBlmt"
