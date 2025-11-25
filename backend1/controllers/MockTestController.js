@@ -160,7 +160,7 @@ const getTestDetails = async (req, res) => {
     console.log(`📖 Fetching test details: ${testId}${userId ? ` (authenticated user: ${userId})` : ' (guest user)'}`);
 
     const test = await MockTest.findById(testId)
-      .populate('seriesId', 'title category')
+      .populate('seriesId', 'title category enrolledStudents')
       .populate('createdBy', 'name');
 
     if (!test || !test.isActive || !test.isPublished) {
@@ -179,15 +179,17 @@ const getTestDetails = async (req, res) => {
         const mongoose = require('mongoose');
         if (userId === '507f1f77bcf86cd799439011') {
           isEnrolled = test.isFree; // Allow dev user access to free tests
-        } else if (mongoose.Types.ObjectId.isValid(userId)) {
+        } else if (mongoose.Types.ObjectId.isValid(userId) && series?.enrolledStudents) {
           isEnrolled = series.enrolledStudents.some(
-            enrollment => enrollment.studentId.toString() === userId
+            enrollment => enrollment.studentId && enrollment.studentId.toString() === userId
           );
         }
       } catch (error) {
         console.log(`⚠️ Error checking enrollment for user ${userId}:`, error.message);
       }
     }
+    
+    console.log(`📊 Enrollment check: userId=${userId}, isFree=${test.isFree}, isEnrolled=${isEnrolled}`);
 
     if (!test.isFree && !isEnrolled) {
       return res.status(403).json({
