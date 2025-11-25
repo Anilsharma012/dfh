@@ -326,10 +326,10 @@ const startTestAttempt = async (req, res) => {
     for (const section of test.sections) {
       const questions = await MockTestQuestion.find({
         _id: { $in: section.questions }
-      }).select('_id questionText passage questionType section images options marks sequenceNumber');
+      }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds');
       
       questionsWithSections.push({
-        section: section.name,
+        name: section.name,
         duration: section.duration,
         questions: questions
       });
@@ -604,10 +604,10 @@ const getAttemptData = async (req, res) => {
     for (const section of test.sections) {
       const questions = await MockTestQuestion.find({
         _id: { $in: section.questions }
-      }).select('_id questionText passage questionType section images options marks sequenceNumber');
+      }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds');
 
       questionsWithSections.push({
-        section: section.name,
+        name: section.name,
         duration: section.duration,
         questions: questions
       });

@@ -559,22 +559,47 @@ const MockTestAttempt = () => {
                     }).filter(Boolean);
                   }
                   
-                  // Handle options as array (legacy format)
+                  // Handle options as array with { label, value } format (database format)
                   if (Array.isArray(currentQuestionData.options)) {
                     return currentQuestionData.options.map((option, index) => {
-                      const optionLabel = String.fromCharCode(65 + index); // A, B, C, D
                       const questionId = currentQuestionData._id;
-                      const optionText = typeof option === 'object' ? option.optionText : option;
-                      const isSelected = responses[questionId] === optionText;
+                      
+                      // Handle { label, value } format from database
+                      if (typeof option === 'object' && option.label && option.value !== undefined) {
+                        const optionLabel = option.label;
+                        const optionText = option.value;
+                        const isSelected = responses[questionId] === optionLabel;
+
+                        return (
+                          <label key={index} className={`option-label ${isSelected ? 'selected' : ''}`}>
+                            <input
+                              type="radio"
+                              name={`question-${questionId}`}
+                              value={optionLabel}
+                              checked={isSelected}
+                              onChange={() => handleAnswerSelect(optionLabel)}
+                            />
+                            <span className="option-indicator">{optionLabel}</span>
+                            <span className="option-text">
+                              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(optionText) }} />
+                            </span>
+                          </label>
+                        );
+                      }
+                      
+                      // Handle legacy { optionText } format or plain string
+                      const optionLabel = String.fromCharCode(65 + index); // A, B, C, D
+                      const optionText = typeof option === 'object' ? (option.optionText || option.value || '') : option;
+                      const isSelected = responses[questionId] === optionLabel || responses[questionId] === optionText;
 
                       return (
                         <label key={index} className={`option-label ${isSelected ? 'selected' : ''}`}>
                           <input
                             type="radio"
                             name={`question-${questionId}`}
-                            value={optionText}
+                            value={optionLabel}
                             checked={isSelected}
-                            onChange={() => handleAnswerSelect(optionText)}
+                            onChange={() => handleAnswerSelect(optionLabel)}
                           />
                           <span className="option-indicator">{optionLabel}</span>
                           <span className="option-text">
