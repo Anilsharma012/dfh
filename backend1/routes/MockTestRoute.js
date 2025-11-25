@@ -11,7 +11,8 @@ const {
   transitionSection,
   submitTest,
   getTestHistory,
-  getMockTestTree
+  getMockTestTree,
+  getAttemptReview
 } = require('../controllers/MockTestController');
 const { authMiddleware, optionalAuth } = require('../middleware/authMiddleware');
 
@@ -32,6 +33,7 @@ router.post('/attempt/:attemptId/sync', authMiddleware, syncProgress);
 router.post('/attempt/:attemptId/transition-section', authMiddleware, transitionSection);
 
 router.post('/attempt/:attemptId/submit', authMiddleware, submitTest);
+router.get('/attempt/:attemptId/review', authMiddleware, getAttemptReview);
 router.get('/history', authMiddleware, getTestHistory);
 
 module.exports = router;

@@ -643,24 +643,40 @@ const MockTestAttempt = () => {
 
       const data = await response.json();
       if (data.success) {
-        const allSections = [...completedSections];
-        if (!allSections.find(s => s.sectionName === testData.sections[currentSection].name)) {
-          allSections.push(calculateSectionResult(currentSection));
+        // Use detailed results from backend if available
+        if (data.results) {
+          setFinalResult({
+            sections: data.results.sections,
+            totalScore: data.results.totalScore,
+            totalQuestions: data.results.totalQuestions,
+            totalAnswered: data.results.totalAnswered,
+            totalCorrect: data.results.totalCorrect,
+            totalIncorrect: data.results.totalIncorrect,
+            totalNotAnswered: data.results.totalNotAnswered,
+            positiveMarks: data.results.positiveMarks,
+            negativeMarks: data.results.negativeMarks,
+            percentage: parseFloat(data.results.percentage),
+            attemptId: data.attemptId
+          });
+        } else {
+          // Fallback to client-side calculation
+          const allSections = [...completedSections];
+          if (!allSections.find(s => s.sectionName === testData.sections[currentSection].name)) {
+            allSections.push(calculateSectionResult(currentSection));
+          }
+
+          const combinedResult = {
+            sections: allSections,
+            totalScore: allSections.reduce((sum, section) => sum + section.score, 0),
+            maxTotalScore: allSections.reduce((sum, section) => sum + section.maxScore, 0),
+            totalAnswered: allSections.reduce((sum, section) => sum + section.answered, 0),
+            totalQuestions: allSections.reduce((sum, section) => sum + section.totalQuestions, 0),
+            percentage: 0,
+            backendScore: data.score
+          };
+          combinedResult.percentage = (combinedResult.totalScore / combinedResult.maxTotalScore) * 100;
+          setFinalResult(combinedResult);
         }
-
-        const combinedResult = {
-          sections: allSections,
-          totalScore: allSections.reduce((sum, section) => sum + section.score, 0),
-          maxTotalScore: allSections.reduce((sum, section) => sum + section.maxScore, 0),
-          totalAnswered: allSections.reduce((sum, section) => sum + section.answered, 0),
-          totalQuestions: allSections.reduce((sum, section) => sum + section.totalQuestions, 0),
-          percentage: 0,
-          backendScore: data.score
-        };
-
-        combinedResult.percentage = (combinedResult.totalScore / combinedResult.maxTotalScore) * 100;
-
-        setFinalResult(combinedResult);
         setShowFinalResult(true);
       }
     } catch (error) {
@@ -1346,8 +1362,27 @@ const MockTestAttempt = () => {
                 <div className="overall-stats">
                   <div className="big-stat">
                     <span className="big-stat-label">Overall Score</span>
-                    <span className="big-stat-value">{finalResult.totalAnswered}/{finalResult.totalQuestions}</span>
-                    <span className="big-stat-percentage">{finalResult.percentage.toFixed(1)}%</span>
+                    <span className="big-stat-value">{finalResult.totalScore}</span>
+                    <span className="big-stat-percentage">
+                      {finalResult.positiveMarks && finalResult.negativeMarks !== undefined 
+                        ? `+${finalResult.positiveMarks} / -${finalResult.negativeMarks}`
+                        : `${finalResult.percentage?.toFixed(1) || 0}%`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="score-breakdown">
+                  <div className="breakdown-item correct">
+                    <span className="breakdown-label">Correct</span>
+                    <span className="breakdown-value">{finalResult.totalCorrect || 0}</span>
+                  </div>
+                  <div className="breakdown-item incorrect">
+                    <span className="breakdown-label">Incorrect</span>
+                    <span className="breakdown-value">{finalResult.totalIncorrect || 0}</span>
+                  </div>
+                  <div className="breakdown-item unanswered">
+                    <span className="breakdown-label">Unanswered</span>
+                    <span className="breakdown-value">{finalResult.totalNotAnswered || (finalResult.totalQuestions - finalResult.totalAnswered)}</span>
                   </div>
                 </div>
 
@@ -1358,11 +1393,10 @@ const MockTestAttempt = () => {
                       <tr>
                         <th>Section</th>
                         <th>Questions</th>
-                        <th>Answered</th>
+                        <th>Correct</th>
+                        <th>Incorrect</th>
                         <th>Not Answered</th>
-                        <th>Marked</th>
-                        <th>Not Visited</th>
-                        <th>%</th>
+                        <th>Score</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1370,11 +1404,10 @@ const MockTestAttempt = () => {
                         <tr key={index}>
                           <td className="section-name">{section.sectionName}</td>
                           <td>{section.totalQuestions}</td>
-                          <td className="answered">{section.answered}</td>
-                          <td className="not-answered">{section.notAnswered}</td>
-                          <td className="marked">{section.markedForReview}</td>
-                          <td className="not-visited">{section.notVisited}</td>
-                          <td>{((section.answered / section.totalQuestions) * 100).toFixed(1)}%</td>
+                          <td className="correct">{section.correct || 0}</td>
+                          <td className="incorrect">{section.incorrect || 0}</td>
+                          <td className="not-answered">{section.notAnswered || 0}</td>
+                          <td className="score">{section.score || 0}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1383,6 +1416,12 @@ const MockTestAttempt = () => {
               </div>
             </div>
             <div className="final-result-actions">
+              <button 
+                className="result-btn secondary" 
+                onClick={() => navigate(`/student/mock-test/review/${finalResult.attemptId || currentAttemptIdRef.current}`)}
+              >
+                View Detailed Review
+              </button>
               <button className="result-btn primary" onClick={() => navigate('/student/mock-tests')}>
                 Back to Mock Tests
               </button>

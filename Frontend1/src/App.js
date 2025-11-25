@@ -70,6 +70,7 @@ import MockTestPage from "./pages/Student/MockTests/MockTestPage";
 import MockTestInstructions from "./pages/Student/MockTests/MockTestInstructions";
 import MockTestTerms from "./pages/Student/MockTests/MockTestTerms";
 import MockTestAttempt from "./pages/Student/MockTests/MockTestAttempt";
+import MockTestReview from "./pages/Student/MockTests/MockTestReview";
 import CourseViewer from "./pages/Student/CourseViewer/CourseViewer";
 import StudentCourseContentManager from "./pages/Student/CourseContentManager/StudentCourseContentManager";
 import StudentMyProgress from "./pages/Student/Progress/StudentMyProgress";
@@ -528,6 +529,7 @@ const AppContent = () => {
           <Route path="mock-test/:testId/instructions" element={<MockTestInstructions />} />
           <Route path="mock-test/:testId/terms" element={<MockTestTerms />} />
           <Route path="mock-test/:testId/attempt/:attemptId" element={<MockTestAttempt />} />
+          <Route path="mock-test/review/:attemptId" element={<MockTestReview />} />
           <Route path="my-courses" element={<Mycourse />} />
           <Route path="my-progress" element={<StudentMyProgress />} />
           <Route path="ocr-upload" element={<StudentOCRUpload />} />

@@ -950,14 +950,62 @@ const submitTest = async (req, res) => {
       });
     }
 
-    // Calculate scores
+    // Get test sections
+    const test = attempt.testPaperId;
+    
+    // Calculate section-wise results
+    const sectionResults = {};
     let totalScore = 0;
     let positiveMarks = 0;
     let negativeMarks = 0;
+    let totalCorrect = 0;
+    let totalIncorrect = 0;
+    let totalAnswered = 0;
+    let totalQuestions = 0;
 
+    // Initialize section results
+    for (const section of test.sections) {
+      sectionResults[section.name] = {
+        sectionName: section.name,
+        totalQuestions: 0,
+        answered: 0,
+        correct: 0,
+        incorrect: 0,
+        notAnswered: 0,
+        score: 0,
+        positiveMarks: 0,
+        negativeMarks: 0
+      };
+    }
+
+    // Get all questions for this test
+    const allQuestions = await MockTestQuestion.find({
+      testPaperId: test._id,
+      isActive: true
+    });
+
+    // Map question IDs to sections
+    const questionSectionMap = {};
+    for (const question of allQuestions) {
+      questionSectionMap[question._id.toString()] = question.section;
+      if (sectionResults[question.section]) {
+        sectionResults[question.section].totalQuestions++;
+        totalQuestions++;
+      }
+    }
+
+    // Calculate scores per response
     for (const response of attempt.responses) {
+      const questionId = response.questionId.toString();
+      const sectionName = questionSectionMap[questionId];
+      
+      if (!sectionName || !sectionResults[sectionName]) continue;
+
       if (response.isAnswered) {
-        const question = await MockTestQuestion.findById(response.questionId);
+        totalAnswered++;
+        sectionResults[sectionName].answered++;
+        
+        const question = allQuestions.find(q => q._id.toString() === questionId);
         
         if (question) {
           // Check if answer is correct
@@ -965,29 +1013,42 @@ const submitTest = async (req, res) => {
           if (question.questionType === 'MCQ') {
             isCorrect = response.selectedAnswer === question.correctAnswer;
           } else if (question.questionType === 'MSQ') {
-            // For multiple select questions
-            isCorrect = JSON.stringify(response.selectedAnswer.sort()) === 
-                       JSON.stringify(question.correctAnswer.sort());
+            isCorrect = JSON.stringify(response.selectedAnswer?.sort?.() || []) === 
+                       JSON.stringify(question.correctAnswer?.sort?.() || []);
           } else if (question.questionType === 'NAT') {
             isCorrect = parseFloat(response.selectedAnswer) === parseFloat(question.correctAnswer);
           }
 
           if (isCorrect) {
-            totalScore += question.marks.positive;
-            positiveMarks += question.marks.positive;
+            totalScore += question.marks?.positive || 3;
+            positiveMarks += question.marks?.positive || 3;
+            totalCorrect++;
+            sectionResults[sectionName].correct++;
+            sectionResults[sectionName].score += question.marks?.positive || 3;
+            sectionResults[sectionName].positiveMarks += question.marks?.positive || 3;
           } else {
-            totalScore += question.marks.negative;
-            negativeMarks += Math.abs(question.marks.negative);
+            totalScore += question.marks?.negative || -1;
+            negativeMarks += Math.abs(question.marks?.negative || 1);
+            totalIncorrect++;
+            sectionResults[sectionName].incorrect++;
+            sectionResults[sectionName].score += question.marks?.negative || -1;
+            sectionResults[sectionName].negativeMarks += Math.abs(question.marks?.negative || 1);
           }
         }
       }
+    }
+
+    // Calculate not answered for each section
+    for (const sectionName of Object.keys(sectionResults)) {
+      sectionResults[sectionName].notAnswered = 
+        sectionResults[sectionName].totalQuestions - sectionResults[sectionName].answered;
     }
 
     // Update attempt
     attempt.isCompleted = true;
     attempt.isSubmitted = true;
     attempt.endTime = new Date();
-    attempt.timeSpent = Math.floor((attempt.endTime - attempt.startTime) / (1000 * 60)); // in minutes
+    attempt.timeSpent = Math.floor((attempt.endTime - attempt.startTime) / (1000 * 60));
     attempt.score.total = totalScore;
     attempt.marks.total = totalScore;
     attempt.marks.positive = positiveMarks;
@@ -1000,7 +1061,20 @@ const submitTest = async (req, res) => {
       success: true,
       message: 'Test submitted successfully',
       score: totalScore,
-      timeSpent: attempt.timeSpent
+      timeSpent: attempt.timeSpent,
+      results: {
+        totalQuestions,
+        totalAnswered,
+        totalCorrect,
+        totalIncorrect,
+        totalNotAnswered: totalQuestions - totalAnswered,
+        totalScore,
+        positiveMarks,
+        negativeMarks,
+        percentage: totalQuestions > 0 ? ((totalCorrect / totalQuestions) * 100).toFixed(2) : 0,
+        sections: Object.values(sectionResults)
+      },
+      attemptId: attempt._id
     });
   } catch (error) {
     console.error('❌ Error submitting test:', error);
@@ -1408,6 +1482,147 @@ const getMockTestTree = async (req, res) => {
     });
   }
 };
+// Get attempt review data (for reviewing completed test with correct answers)
+const getAttemptReview = async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const userId = req.user.id;
+
+    console.log(`📖 Getting attempt review: ${attemptId} for user: ${userId}`);
+
+    const attempt = await MockTestAttempt.findOne({
+      _id: attemptId,
+      userId: userId
+    }).populate('testPaperId');
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test attempt not found'
+      });
+    }
+
+    if (!attempt.isSubmitted) {
+      return res.status(400).json({
+        success: false,
+        message: 'Test has not been submitted yet. Complete the test to view review.'
+      });
+    }
+
+    const test = attempt.testPaperId;
+    
+    // Get all questions with correct answers and explanations
+    const allQuestions = await MockTestQuestion.find({
+      testPaperId: test._id,
+      isActive: true
+    }).select('_id questionText passage questionType section images options marks sequenceNumber correctAnswer correctOptionIds explanation solution').sort({ sequenceNumber: 1 });
+
+    // Build response data with user answers and correct answers
+    const responseMap = {};
+    for (const response of attempt.responses) {
+      responseMap[response.questionId.toString()] = {
+        selectedAnswer: response.selectedAnswer,
+        isAnswered: response.isAnswered
+      };
+    }
+
+    // Organize by sections
+    const sections = test.sections.map(section => {
+      const sectionQuestions = allQuestions.filter(q => q.section === section.name);
+      
+      return {
+        name: section.name,
+        questions: sectionQuestions.map(q => {
+          const userResponse = responseMap[q._id.toString()];
+          let isCorrect = false;
+          
+          if (userResponse?.isAnswered) {
+            if (q.questionType === 'MCQ') {
+              isCorrect = userResponse.selectedAnswer === q.correctAnswer;
+            } else if (q.questionType === 'MSQ') {
+              isCorrect = JSON.stringify(userResponse.selectedAnswer?.sort?.() || []) === 
+                         JSON.stringify(q.correctAnswer?.sort?.() || []);
+            } else if (q.questionType === 'NAT') {
+              isCorrect = parseFloat(userResponse.selectedAnswer) === parseFloat(q.correctAnswer);
+            }
+          }
+
+          return {
+            _id: q._id,
+            questionText: q.questionText,
+            passage: q.passage,
+            questionType: q.questionType,
+            options: q.options,
+            images: q.images,
+            marks: q.marks,
+            correctAnswer: q.correctAnswer,
+            correctOptionIds: q.correctOptionIds,
+            explanation: q.explanation,
+            solution: q.solution,
+            userAnswer: userResponse?.selectedAnswer || null,
+            isAnswered: userResponse?.isAnswered || false,
+            isCorrect: isCorrect
+          };
+        })
+      };
+    });
+
+    // Calculate summary statistics
+    let totalCorrect = 0;
+    let totalIncorrect = 0;
+    let totalAnswered = 0;
+    let totalQuestions = 0;
+
+    sections.forEach(section => {
+      section.questions.forEach(q => {
+        totalQuestions++;
+        if (q.isAnswered) {
+          totalAnswered++;
+          if (q.isCorrect) {
+            totalCorrect++;
+          } else {
+            totalIncorrect++;
+          }
+        }
+      });
+    });
+
+    console.log('✅ Attempt review data fetched successfully');
+    res.status(200).json({
+      success: true,
+      test: {
+        _id: test._id,
+        title: test.title,
+        testNumber: test.testNumber
+      },
+      attempt: {
+        _id: attempt._id,
+        score: attempt.score,
+        marks: attempt.marks,
+        timeSpent: attempt.timeSpent,
+        startTime: attempt.startTime,
+        endTime: attempt.endTime
+      },
+      sections,
+      summary: {
+        totalQuestions,
+        totalAnswered,
+        totalCorrect,
+        totalIncorrect,
+        totalNotAnswered: totalQuestions - totalAnswered,
+        accuracy: totalAnswered > 0 ? ((totalCorrect / totalAnswered) * 100).toFixed(2) : 0
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching attempt review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch attempt review',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getPublishedSeries,
   getTestsInSeries,
@@ -1419,5 +1634,6 @@ module.exports = {
   transitionSection,
   submitTest,
   getTestHistory,
-  getMockTestTree 
+  getMockTestTree,
+  getAttemptReview
 };
