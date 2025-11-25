@@ -3,6 +3,9 @@ const Subject = require("../models/course/Subject");
 const Chapter = require("../models/course/Chapter");
 const Topic = require("../models/course/Topic");
 const Test = require("../models/course/Test");
+const VideoContent = require("../models/course/VideoContent");
+const MockTestSeries = require("../models/MockTestSeries");
+const MockTest = require("../models/MockTest");
 const User = require("../models/UserSchema");
 
 // Helper function to check if student has access to course
@@ -295,6 +298,143 @@ exports.getStudentCourseStructure = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch course structure"
+    });
+  }
+};
+
+// Get comprehensive course content for students (videos, mock tests, full structure)
+exports.getComprehensiveCourseContent = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    console.log(`📚 Fetching comprehensive course content for course: ${courseId}, user: ${userId}`);
+
+    // Check course access
+    const accessCheck = await checkCourseAccess(userId, courseId);
+    if (!accessCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: accessCheck.message
+      });
+    }
+
+    const course = accessCheck.course;
+
+    // 1. Get Recorded Video Classes
+    const videoContent = await VideoContent.find({ courseId })
+      .sort({ serialNumber: 1 })
+      .lean();
+
+    console.log(`🎥 Found ${videoContent.length} video lectures for course`);
+
+    // Group videos by topic if available
+    const groupedVideos = {};
+    videoContent.forEach(video => {
+      const topicKey = video.topicName || 'General';
+      if (!groupedVideos[topicKey]) {
+        groupedVideos[topicKey] = [];
+      }
+      groupedVideos[topicKey].push(video);
+    });
+
+    // 2. Get Mock Tests (from MockTestSeries that might be linked to this course)
+    // Also get all published mock test series that students can access
+    const mockTestSeries = await MockTestSeries.find({
+      isActive: true,
+      isPublished: true
+    }).lean();
+
+    // Get mock tests within each series
+    const mockTestsWithTests = await Promise.all(
+      mockTestSeries.map(async (series) => {
+        const tests = await MockTest.find({
+          seriesId: series._id,
+          isActive: true,
+          isPublished: true
+        }).sort({ testNumber: 1 }).lean();
+        return {
+          ...series,
+          tests
+        };
+      })
+    );
+
+    console.log(`📝 Found ${mockTestSeries.length} mock test series`);
+
+    // 3. Get Full Course Structure (Subjects -> Chapters -> Topics -> Tests)
+    const subjects = await Subject.find({ courseId }).sort({ order: 1 }).lean();
+    const chapters = await Chapter.find({ courseId }).sort({ order: 1 }).lean();
+    const topics = await Topic.find({ courseId }).sort({ order: 1 }).lean();
+    const tests = await Test.find({ course: courseId }).sort({ title: 1 }).lean();
+
+    console.log(`📊 Course Structure: ${subjects.length} subjects, ${chapters.length} chapters, ${topics.length} topics, ${tests.length} tests`);
+
+    // Organize the hierarchical structure
+    const fullCourseStructure = subjects.map(subject => ({
+      ...subject,
+      chapters: chapters
+        .filter(chapter => chapter.subjectId && chapter.subjectId.toString() === subject._id.toString())
+        .map(chapter => ({
+          ...chapter,
+          topics: topics
+            .filter(topic => topic.chapterId && topic.chapterId.toString() === chapter._id.toString())
+            .map(topic => ({
+              ...topic,
+              tests: tests.filter(test => test.topic && test.topic.toString() === topic._id.toString()),
+              videos: videoContent.filter(v => v.topicName === topic.name)
+            })),
+          // Also attach tests directly to chapters if they don't have topics
+          directTests: tests.filter(test => test.chapter && test.chapter.toString() === chapter._id.toString() && !test.topic)
+        }))
+    }));
+
+    // 4. Calculate progress stats
+    const totalVideos = videoContent.length;
+    const totalTests = tests.length;
+    const totalMockTests = mockTestsWithTests.reduce((acc, series) => acc + series.tests.length, 0);
+
+    res.status(200).json({
+      success: true,
+      course: {
+        _id: course._id,
+        name: course.name,
+        description: course.description,
+        courseType: course.courseType,
+        thumbnail: course.thumbnail,
+        overview: course.overview
+      },
+      recordedClasses: {
+        totalVideos,
+        videos: videoContent,
+        groupedByTopic: groupedVideos
+      },
+      mockTests: {
+        totalSeries: mockTestSeries.length,
+        totalTests: totalMockTests,
+        series: mockTestsWithTests
+      },
+      fullCourseContent: {
+        totalSubjects: subjects.length,
+        totalChapters: chapters.length,
+        totalTopics: topics.length,
+        totalTests,
+        structure: fullCourseStructure
+      },
+      stats: {
+        totalVideos,
+        totalTests,
+        totalMockTests,
+        totalContent: totalVideos + totalTests + totalMockTests
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching comprehensive course content:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch course content",
+      error: error.message
     });
   }
 };

@@ -5,7 +5,8 @@ const {
   getStudentSubjectChapters,
   getStudentChapterTopics,
   getStudentTopicTests,
-  getStudentCourseStructure
+  getStudentCourseStructure,
+  getComprehensiveCourseContent
 } = require("../controllers/StudentCourseController");
 
 // Import auth middleware (regular student auth, not admin)
@@ -13,6 +14,9 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 
 // All routes require student authentication
 router.use(authMiddleware);
+
+// Get comprehensive course content (videos, mock tests, full structure) - NEW
+router.get("/course/:courseId/comprehensive-content", getComprehensiveCourseContent);
 
 // Get complete course structure (optimized single call)
 router.get("/course/:courseId/structure", getStudentCourseStructure);

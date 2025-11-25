@@ -1,451 +1,533 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import "./StudentCourseContentManager.css";
-import { FaEdit, FaTrash } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
-import { useParams } from "react-router-dom";
+import { FaPlay, FaVideo, FaFileAlt, FaChevronDown, FaChevronRight, FaBook, FaClipboardList, FaGraduationCap, FaClock, FaCheckCircle, FaLock } from "react-icons/fa";
+import { useNavigate, useParams } from "react-router-dom";
+import DOMPurify from 'dompurify';
 
 const StudentCourseContentManager = () => {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const [course, setCourse] = useState(null);
-  const [subjects, setSubjects] = useState([]);
-  const [chapters, setChapters] = useState([]);
-  const [topics, setTopics] = useState([]);
-  const [tests, setTests] = useState([]);
-  const [questions, setQuestions] = useState([]);
-  const [selectedSubjectId, setSelectedSubjectId] = useState("");
-  const [selectedChapterId, setSelectedChapterId] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
-  const [selectedTestId, setSelectedTestId] = useState("");
-  const [activeTab, setActiveTab] = useState("subjects");
   const [loading, setLoading] = useState(true);
-  const [locked, setLocked] = useState(false);
-  const [publishedCourse, setPublishedCourse] = useState(null);
+  const [error, setError] = useState(null);
+  const [activeSection, setActiveSection] = useState("recorded");
+  
+  const [recordedClasses, setRecordedClasses] = useState({ videos: [], groupedByTopic: {}, totalVideos: 0 });
+  const [mockTests, setMockTests] = useState({ series: [], totalTests: 0, totalSeries: 0 });
+  const [fullCourseContent, setFullCourseContent] = useState({ structure: [], totalSubjects: 0, totalChapters: 0, totalTopics: 0, totalTests: 0 });
+  const [stats, setStats] = useState({ totalVideos: 0, totalTests: 0, totalMockTests: 0 });
+  
+  const [expandedSubjects, setExpandedSubjects] = useState({});
+  const [expandedChapters, setExpandedChapters] = useState({});
+  const [expandedTopics, setExpandedTopics] = useState({});
+  const [playingVideo, setPlayingVideo] = useState(null);
 
-  // Fetch course data on component mount
+  const sanitizeHtml = (html) => {
+    if (!html) return '';
+    return DOMPurify.sanitize(html, { ALLOWED_TAGS: ['p', 'b', 'i', 'strong', 'em', 'ul', 'ol', 'li', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'] });
+  };
+
   useEffect(() => {
-    const fetchCourseData = async () => {
+    const fetchCourseContent = async () => {
       try {
+        setLoading(true);
         const token = localStorage.getItem("authToken") || localStorage.getItem("token");
-        const res = await axios.get(`/api/student/course/${courseId}/subjects`, {
-          headers: { Authorization: `Bearer ${token}` },
+        console.log("📚 Fetching comprehensive content, token present:", !!token);
+        
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(`/api/student/course/${courseId}/comprehensive-content`, {
+          headers,
         });
-        setCourse(res.data.course);
-        setSubjects(res.data.subjects || []);
-        setLoading(false);
-      } catch (error) {
-        if (error?.response?.status === 403) {
-          try {
-            const pub = await axios.get(`/api/courses/student/published-courses/${courseId}`);
-            setPublishedCourse(pub.data?.course || null);
-            setCourse(pub.data?.course || null);
-            setLocked(true);
-          } catch (_) {}
+
+        console.log("📦 API Response received:", res.data);
+        console.log("📦 Response success:", res.data?.success);
+
+        if (res.data && res.data.success) {
+          console.log("✅ Setting course data...");
+          setCourse(res.data.course);
+          setRecordedClasses(res.data.recordedClasses || { videos: [], groupedByTopic: {} });
+          setMockTests(res.data.mockTests || { series: [], totalTests: 0 });
+          setFullCourseContent(res.data.fullCourseContent || { structure: [] });
+          setStats(res.data.stats || { totalVideos: 0, totalTests: 0, totalMockTests: 0 });
+          console.log("✅ All data set, videos count:", res.data.recordedClasses?.totalVideos);
+          
+          if (res.data.recordedClasses?.totalVideos > 0) {
+            setActiveSection("recorded");
+          } else if (res.data.mockTests?.totalTests > 0) {
+            setActiveSection("mocktests");
+          } else {
+            setActiveSection("fullcourse");
+          }
+          console.log("✅ Active section set");
+        } else {
+          console.error("❌ API returned success:false or no data");
+          setError("Failed to load course content. Invalid response from server.");
         }
-        console.error("Error fetching course data", error);
+        setLoading(false);
+        console.log("✅ Loading set to false");
+      } catch (err) {
+        console.error("❌ Error fetching course content:", err);
+        console.error("❌ Error response:", err?.response);
+        if (err?.response?.status === 403) {
+          setError("You need to purchase this course to access its content.");
+        } else {
+          setError("Failed to load course content. Please try again.");
+        }
         setLoading(false);
       }
     };
 
     if (courseId) {
-      fetchCourseData();
+      fetchCourseContent();
     }
   }, [courseId]);
 
-  // Fetch chapters when subject is selected
-  useEffect(() => {
-    if (!selectedSubjectId || locked) return;
-    
-    const fetchChapters = async () => {
-      try {
-        const token = localStorage.getItem("authToken") || localStorage.getItem("token");
-        const res = await axios.get(`/api/student/subject/${selectedSubjectId}/chapters`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setChapters(res.data.chapters || []);
-      } catch (error) {
-        console.error("Error fetching chapters", error);
-      }
-    };
-    
-    fetchChapters();
-  }, [selectedSubjectId]);
+  const toggleSubject = (subjectId) => {
+    setExpandedSubjects(prev => ({ ...prev, [subjectId]: !prev[subjectId] }));
+  };
 
-  // Fetch topics when chapter is selected
-  useEffect(() => {
-    if (!selectedChapterId || locked) return;
-    
-    const fetchTopics = async () => {
-      try {
-        const token = localStorage.getItem("authToken") || localStorage.getItem("token");
-        const res = await axios.get(`/api/student/chapter/${selectedChapterId}/topics`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setTopics(res.data.topics || []);
-      } catch (error) {
-        console.error("Error fetching topics", error);
-      }
-    };
-    
-    fetchTopics();
-  }, [selectedChapterId]);
+  const toggleChapter = (chapterId) => {
+    setExpandedChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
+  };
 
-  // Fetch tests when topic is selected
-  useEffect(() => {
-    if (!selectedTopicId || locked) return;
-    
-    const fetchTests = async () => {
-      try {
-        const token = localStorage.getItem("authToken") || localStorage.getItem("token");
-        const res = await axios.get(`/api/student/topic/${selectedTopicId}/tests`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setTests(res.data.tests || []);
-      } catch (error) {
-        console.error("Error fetching tests", error);
-      }
-    };
-    
-    fetchTests();
-  }, [selectedTopicId]);
+  const toggleTopic = (topicId) => {
+    setExpandedTopics(prev => ({ ...prev, [topicId]: !prev[topicId] }));
+  };
 
-  // Fetch questions when test is selected
-  useEffect(() => {
-    if (!selectedTestId) return;
-    // Questions are accessible within the test interface; skip admin-only endpoint here
-    setQuestions([]);
-  }, [selectedTestId]);
+  const getYouTubeEmbedUrl = (url) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : url;
+  };
 
   if (loading) {
-    return <div className="loading">Loading course content...</div>;
-  }
-
-  if (!course) {
-    return <div className="error">Course not found</div>;
-  }
-
-  if (locked) {
     return (
       <div className="student-content-manager">
-        <div className="header">
-          <h2 className="page-title">🔒 Course Locked</h2>
-          <p className="course-description">You need to purchase/unlock this course to view its schedule and content.</p>
+        <div className="loading-state">
+          <div className="loading-spinner"></div>
+          <p>Loading course content...</p>
         </div>
-        {publishedCourse && (
-          <div className="locked-course-card">
-            <h3>{publishedCourse.name}</h3>
-            <p>{publishedCourse.description}</p>
-            <div style={{display:'flex',gap:12}}>
-              <button className="continue-btn primary" onClick={()=>navigate('/course-purchase', { state: { ...publishedCourse }})}>Buy Course</button>
-              <button className="info-btn" onClick={()=>navigate('/student')}>Back to Dashboard</button>
-            </div>
-          </div>
-        )}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="student-content-manager">
+        <div className="error-state">
+          <FaLock className="error-icon" />
+          <h3>Access Denied</h3>
+          <p>{error}</p>
+          <button className="back-btn" onClick={() => navigate('/student/dashboard')}>
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="student-content-manager">
-      <div className="header">
-        <h2 className="page-title">📚 Course Content: {course.name}</h2>
-        <p className="course-description">{course.description}</p>
-        <div className="header-actions">
-          <button
-            className="live-classes-btn"
-            onClick={() => navigate(`/student/live-classes?courseId=${course._id}`)}
-          >
-            Live Classes
-          </button>
+      <div className="course-header">
+        <div className="course-info">
+          <h1 className="course-title">{course?.name || "Course Content"}</h1>
+          <div className="course-description" dangerouslySetInnerHTML={{ __html: sanitizeHtml(course?.description) }} />
+        </div>
+        <div className="course-stats">
+          <div className="stat-item">
+            <FaVideo />
+            <span>{stats.totalVideos} Videos</span>
+          </div>
+          <div className="stat-item">
+            <FaClipboardList />
+            <span>{stats.totalMockTests} Mock Tests</span>
+          </div>
+          <div className="stat-item">
+            <FaBook />
+            <span>{stats.totalTests} Practice Tests</span>
+          </div>
         </div>
       </div>
 
-      <div className="tab-buttons">
-        <button
-          className={activeTab === "subjects" ? "active-tab" : ""}
-          onClick={() => setActiveTab("subjects")}
+      <div className="section-tabs">
+        <button 
+          className={`section-tab ${activeSection === 'recorded' ? 'active' : ''}`}
+          onClick={() => setActiveSection('recorded')}
         >
-          Subjects ({subjects.length})
+          <FaVideo /> Recorded Classes
+          <span className="tab-count">{recordedClasses.totalVideos}</span>
         </button>
-        <button
-          className={activeTab === "chapters" ? "active-tab" : ""}
-          onClick={() => setActiveTab("chapters")}
+        <button 
+          className={`section-tab ${activeSection === 'mocktests' ? 'active' : ''}`}
+          onClick={() => setActiveSection('mocktests')}
         >
-          Chapters ({chapters.length})
+          <FaClipboardList /> Mock Tests
+          <span className="tab-count">{mockTests.totalTests}</span>
         </button>
-        <button
-          className={activeTab === "topics" ? "active-tab" : ""}
-          onClick={() => setActiveTab("topics")}
+        <button 
+          className={`section-tab ${activeSection === 'fullcourse' ? 'active' : ''}`}
+          onClick={() => setActiveSection('fullcourse')}
         >
-          Topics ({topics.length})
-        </button>
-        <button
-          className={activeTab === "tests" ? "active-tab" : ""}
-          onClick={() => setActiveTab("tests")}
-        >
-          Tests ({tests.length})
-        </button>
-        <button
-          className={activeTab === "questions" ? "active-tab" : ""}
-          onClick={() => setActiveTab("questions")}
-        >
-          Questions ({questions.length})
+          <FaGraduationCap /> Full Course Content
+          <span className="tab-count">{fullCourseContent.totalSubjects}</span>
         </button>
       </div>
 
-      {/* Content based on active tab */}
-      <div className="tab-content">
-        {activeTab === "subjects" && (
-          <div className="subjects-section">
-            <h3>Subjects in this Course</h3>
-            {subjects.length > 0 ? (
-              <div className="content-grid">
-                {subjects.map((subject) => (
-                  <div 
-                    key={subject._id} 
-                    className={`content-card ${selectedSubjectId === subject._id ? 'selected' : ''}`}
-                    onClick={() => {
-                      setSelectedSubjectId(subject._id);
-                      setActiveTab("chapters");
-                    }}
-                  >
-                    <h4>{subject.name}</h4>
-                    <p>Click to view chapters</p>
-                    <div className="card-meta">
-                      <span>Created: {new Date(subject.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
+      <div className="section-content">
+        {activeSection === 'recorded' && (
+          <div className="recorded-classes-section">
+            <h2 className="section-title">
+              <FaVideo /> Recorded Video Lectures
+            </h2>
+            
+            {recordedClasses.totalVideos === 0 ? (
+              <div className="empty-state">
+                <FaVideo className="empty-icon" />
+                <h3>No Video Lectures Available</h3>
+                <p>Video lectures for this course will appear here once they are uploaded by the instructor.</p>
               </div>
             ) : (
-              <p className="no-content">No subjects available for this course.</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === "chapters" && (
-          <div className="chapters-section">
-            <div className="section-header">
-              <h3>Chapters</h3>
-              <div className="form-group">
-                <label>Select Subject:</label>
-                <select
-                  value={selectedSubjectId}
-                  onChange={(e) => setSelectedSubjectId(e.target.value)}
-                >
-                  <option value="">-- Select Subject --</option>
-                  {subjects.map((subject) => (
-                    <option key={subject._id} value={subject._id}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {selectedSubjectId && chapters.length > 0 ? (
-              <div className="content-grid">
-                {chapters.map((chapter) => (
-                  <div 
-                    key={chapter._id} 
-                    className={`content-card ${selectedChapterId === chapter._id ? 'selected' : ''}`}
-                    onClick={() => {
-                      setSelectedChapterId(chapter._id);
-                      setActiveTab("topics");
-                    }}
-                  >
-                    <h4>{chapter.name}</h4>
-                    <p>Click to view topics</p>
-                    <div className="card-meta">
-                      <span>Created: {new Date(chapter.createdAt).toLocaleDateString()}</span>
+              <>
+                {playingVideo && (
+                  <div className="video-player-container">
+                    <div className="video-player-header">
+                      <h3>{playingVideo.title}</h3>
+                      <button className="close-player" onClick={() => setPlayingVideo(null)}>Close</button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : selectedSubjectId ? (
-              <p className="no-content">No chapters available for the selected subject.</p>
-            ) : (
-              <p className="no-content">Please select a subject to view chapters.</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === "topics" && (
-          <div className="topics-section">
-            <div className="section-header">
-              <h3>Topics</h3>
-              <div className="form-group">
-                <label>Select Chapter:</label>
-                <select
-                  value={selectedChapterId}
-                  onChange={(e) => setSelectedChapterId(e.target.value)}
-                >
-                  <option value="">-- Select Chapter --</option>
-                  {chapters.map((chapter) => (
-                    <option key={chapter._id} value={chapter._id}>
-                      {chapter.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {selectedChapterId && topics.length > 0 ? (
-              <div className="content-grid">
-                {topics.map((topic) => (
-                  <div 
-                    key={topic._id} 
-                    className={`content-card ${selectedTopicId === topic._id ? 'selected' : ''}`}
-                    onClick={() => {
-                      setSelectedTopicId(topic._id);
-                      setActiveTab("tests");
-                    }}
-                  >
-                    <h4>{topic.name}</h4>
-                    {topic.description && <p>{topic.description}</p>}
-                    {topic.isFullTestSection && <span className="badge">Full Test Section</span>}
-                    <p>Click to view tests</p>
-                    <div className="card-meta">
-                      <span>Created: {new Date(topic.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : selectedChapterId ? (
-              <p className="no-content">No topics available for the selected chapter.</p>
-            ) : (
-              <p className="no-content">Please select a chapter to view topics.</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === "tests" && (
-          <div className="tests-section">
-            <div className="section-header">
-              <h3>Tests</h3>
-              <div className="form-group">
-                <label>Select Topic:</label>
-                <select
-                  value={selectedTopicId}
-                  onChange={(e) => setSelectedTopicId(e.target.value)}
-                >
-                  <option value="">-- Select Topic --</option>
-                  {topics.map((topic) => (
-                    <option key={topic._id} value={topic._id}>
-                      {topic.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {selectedTopicId && tests.length > 0 ? (
-              <div className="content-grid">
-                {tests.map((test) => (
-                  <div 
-                    key={test._id} 
-                    className={`content-card ${selectedTestId === test._id ? 'selected' : ''}`}
-                    onClick={() => {
-                      setSelectedTestId(test._id);
-                      setActiveTab("questions");
-                    }}
-                  >
-                    <h4>{test.title}</h4>
-                    {test.description && <p>{test.description}</p>}
-                    <div className="test-details">
-                      <span className="duration">⏱️ {test.duration} min</span>
-                      <span className="marks">📊 {test.totalMarks} marks</span>
-                    </div>
-                    <p>Click to view questions</p>
-                    <div className="card-meta">
-                      <span>Created: {new Date(test.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : selectedTopicId ? (
-              <p className="no-content">No tests available for the selected topic.</p>
-            ) : (
-              <p className="no-content">Please select a topic to view tests.</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === "questions" && (
-          <div className="questions-section">
-            <div className="section-header">
-              <h3>Questions</h3>
-              <div className="form-group">
-                <label>Select Test:</label>
-                <select
-                  value={selectedTestId}
-                  onChange={(e) => setSelectedTestId(e.target.value)}
-                >
-                  <option value="">-- Select Test --</option>
-                  {tests.map((test) => (
-                    <option key={test._id} value={test._id}>
-                      {test.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {selectedTestId && questions.length > 0 ? (
-              <div className="questions-list">
-                {questions.map((question, index) => (
-                  <div key={question._id} className="question-card">
-                    <div className="question-header">
-                      <h4>Question {index + 1}</h4>
-                      <div className="question-meta">
-                        <span className="marks">+{question.marks} marks</span>
-                        <span className="negative">-{question.negativeMarks} marks</span>
-                        <span className="difficulty">{question.difficulty}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="question-content">
-                      <div 
-                        className="question-text"
-                        dangerouslySetInnerHTML={{ __html: question.questionText }}
+                    <div className="video-player">
+                      <iframe
+                        src={getYouTubeEmbedUrl(playingVideo.videoUrl)}
+                        title={playingVideo.title}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
                       />
-                      
-                      <div className="options">
-                        {['A', 'B', 'C', 'D'].map((option) => (
+                    </div>
+                    {playingVideo.description && (
+                      <div className="video-description">
+                        <p>{playingVideo.description}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {Object.keys(recordedClasses.groupedByTopic).length > 0 ? (
+                  Object.entries(recordedClasses.groupedByTopic).map(([topic, videos]) => (
+                    <div key={topic} className="video-topic-group">
+                      <h3 className="topic-title">{topic}</h3>
+                      <div className="video-grid">
+                        {videos.map((video, index) => (
                           <div 
-                            key={option} 
-                            className={`option ${question.correctOption === option ? 'correct' : ''}`}
+                            key={video._id || index} 
+                            className="video-card"
+                            onClick={() => setPlayingVideo(video)}
                           >
-                            <strong>{option}:</strong> 
-                            <span 
-                              dangerouslySetInnerHTML={{ 
-                                __html: question.options[option] 
-                              }}
-                            />
+                            <div className="video-thumbnail">
+                              {video.thumbnail ? (
+                                <img src={`/uploads/${video.thumbnail}`} alt={video.title} />
+                              ) : (
+                                <div className="thumbnail-placeholder">
+                                  <FaPlay className="play-icon" />
+                                </div>
+                              )}
+                              <div className="play-overlay">
+                                <FaPlay />
+                              </div>
+                              {video.duration && (
+                                <span className="video-duration">{video.duration}</span>
+                              )}
+                            </div>
+                            <div className="video-info">
+                              <h4>{video.title}</h4>
+                              <p className="video-serial">Lecture {video.serialNumber || index + 1}</p>
+                              {video.isFree && <span className="free-badge">FREE</span>}
+                            </div>
                           </div>
                         ))}
                       </div>
-                      
-                      {question.explanation && (
-                        <div className="explanation">
-                          <h5>Explanation:</h5>
-                          <div 
-                            dangerouslySetInnerHTML={{ __html: question.explanation }}
-                          />
-                        </div>
-                      )}
                     </div>
+                  ))
+                ) : (
+                  <div className="video-grid">
+                    {recordedClasses.videos.map((video, index) => (
+                      <div 
+                        key={video._id || index} 
+                        className="video-card"
+                        onClick={() => setPlayingVideo(video)}
+                      >
+                        <div className="video-thumbnail">
+                          {video.thumbnail ? (
+                            <img src={`/uploads/${video.thumbnail}`} alt={video.title} />
+                          ) : (
+                            <div className="thumbnail-placeholder">
+                              <FaPlay className="play-icon" />
+                            </div>
+                          )}
+                          <div className="play-overlay">
+                            <FaPlay />
+                          </div>
+                          {video.duration && (
+                            <span className="video-duration">{video.duration}</span>
+                          )}
+                        </div>
+                        <div className="video-info">
+                          <h4>{video.title}</h4>
+                          <p className="video-serial">Lecture {video.serialNumber || index + 1}</p>
+                          {video.isFree && <span className="free-badge">FREE</span>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : selectedTestId ? (
-              <p className="no-content">No questions available for the selected test.</p>
-            ) : (
-              <p className="no-content">Please select a test to view questions.</p>
+                )}
+              </>
             )}
           </div>
         )}
+
+        {activeSection === 'mocktests' && (
+          <div className="mock-tests-section">
+            <h2 className="section-title">
+              <FaClipboardList /> Mock Tests
+            </h2>
+            
+            {mockTests.totalTests === 0 ? (
+              <div className="empty-state">
+                <FaClipboardList className="empty-icon" />
+                <h3>No Mock Tests Available</h3>
+                <p>Mock tests for practice will appear here once they are published.</p>
+                <button 
+                  className="explore-btn"
+                  onClick={() => navigate('/student/mock-tests')}
+                >
+                  Explore All Mock Tests
+                </button>
+              </div>
+            ) : (
+              <div className="mock-test-series-list">
+                {mockTests.series.map((series) => (
+                  <div key={series._id} className="mock-test-series-card">
+                    <div className="series-header">
+                      <div className="series-info">
+                        <h3>{series.title}</h3>
+                        <p>{series.description}</p>
+                        <div className="series-meta">
+                          <span className="category-badge">{series.category}</span>
+                          <span className="test-count">{series.tests?.length || 0} Tests</span>
+                        </div>
+                      </div>
+                      {series.thumbnail && (
+                        <img 
+                          src={`/uploads/${series.thumbnail}`} 
+                          alt={series.title}
+                          className="series-thumbnail"
+                        />
+                      )}
+                    </div>
+                    
+                    {series.tests && series.tests.length > 0 && (
+                      <div className="series-tests">
+                        {series.tests.slice(0, 5).map((test, index) => (
+                          <div key={test._id} className="test-item">
+                            <div className="test-info">
+                              <FaFileAlt />
+                              <span>{test.title || `Test ${index + 1}`}</span>
+                            </div>
+                            <div className="test-details">
+                              <span className="duration"><FaClock /> {test.duration} min</span>
+                              <span className="marks">{test.totalMarks} marks</span>
+                              {test.isFree ? (
+                                <button 
+                                  className="start-test-btn free"
+                                  onClick={() => navigate(`/student/mock-test/${test._id}/instructions`)}
+                                >
+                                  Start Free Test
+                                </button>
+                              ) : (
+                                <button 
+                                  className="start-test-btn"
+                                  onClick={() => navigate(`/student/mock-test/${test._id}/instructions`)}
+                                >
+                                  Start Test
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {series.tests.length > 5 && (
+                          <button 
+                            className="view-all-btn"
+                            onClick={() => navigate('/student/mock-tests')}
+                          >
+                            View All {series.tests.length} Tests
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeSection === 'fullcourse' && (
+          <div className="full-course-section">
+            <h2 className="section-title">
+              <FaGraduationCap /> Full Course Content
+            </h2>
+            
+            <div className="course-overview">
+              <div className="overview-stats">
+                <div className="stat-box">
+                  <span className="stat-value">{fullCourseContent.totalSubjects}</span>
+                  <span className="stat-label">Subjects</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{fullCourseContent.totalChapters}</span>
+                  <span className="stat-label">Chapters</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{fullCourseContent.totalTopics}</span>
+                  <span className="stat-label">Topics</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-value">{fullCourseContent.totalTests}</span>
+                  <span className="stat-label">Tests</span>
+                </div>
+              </div>
+            </div>
+            
+            {fullCourseContent.structure.length === 0 ? (
+              <div className="empty-state">
+                <FaBook className="empty-icon" />
+                <h3>Course Content Coming Soon</h3>
+                <p>The detailed course curriculum will be available here once the instructor adds the content structure.</p>
+              </div>
+            ) : (
+              <div className="course-tree">
+                {fullCourseContent.structure.map((subject) => (
+                  <div key={subject._id} className="subject-item">
+                    <div 
+                      className="tree-node subject-node"
+                      onClick={() => toggleSubject(subject._id)}
+                    >
+                      {expandedSubjects[subject._id] ? <FaChevronDown /> : <FaChevronRight />}
+                      <FaBook className="node-icon" />
+                      <span className="node-title">{subject.name}</span>
+                      <span className="node-count">{subject.chapters?.length || 0} Chapters</span>
+                    </div>
+                    
+                    {expandedSubjects[subject._id] && subject.chapters && (
+                      <div className="chapters-list">
+                        {subject.chapters.map((chapter) => (
+                          <div key={chapter._id} className="chapter-item">
+                            <div 
+                              className="tree-node chapter-node"
+                              onClick={() => toggleChapter(chapter._id)}
+                            >
+                              {expandedChapters[chapter._id] ? <FaChevronDown /> : <FaChevronRight />}
+                              <FaFileAlt className="node-icon" />
+                              <span className="node-title">{chapter.name}</span>
+                              <span className="node-count">{chapter.topics?.length || 0} Topics</span>
+                            </div>
+                            
+                            {expandedChapters[chapter._id] && (
+                              <div className="topics-list">
+                                {chapter.topics && chapter.topics.map((topic) => (
+                                  <div key={topic._id} className="topic-item">
+                                    <div 
+                                      className="tree-node topic-node"
+                                      onClick={() => toggleTopic(topic._id)}
+                                    >
+                                      {(topic.tests?.length > 0 || topic.videos?.length > 0) && (
+                                        expandedTopics[topic._id] ? <FaChevronDown /> : <FaChevronRight />
+                                      )}
+                                      <FaGraduationCap className="node-icon" />
+                                      <span className="node-title">{topic.name}</span>
+                                      {topic.tests?.length > 0 && (
+                                        <span className="node-badge tests">{topic.tests.length} Tests</span>
+                                      )}
+                                      {topic.videos?.length > 0 && (
+                                        <span className="node-badge videos">{topic.videos.length} Videos</span>
+                                      )}
+                                    </div>
+                                    
+                                    {expandedTopics[topic._id] && (
+                                      <div className="topic-content">
+                                        {topic.videos && topic.videos.length > 0 && (
+                                          <div className="topic-videos">
+                                            {topic.videos.map((video) => (
+                                              <div 
+                                                key={video._id} 
+                                                className="content-item video-item"
+                                                onClick={() => {
+                                                  setPlayingVideo(video);
+                                                  setActiveSection('recorded');
+                                                }}
+                                              >
+                                                <FaVideo />
+                                                <span>{video.title}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {topic.tests && topic.tests.length > 0 && (
+                                          <div className="topic-tests">
+                                            {topic.tests.map((test) => (
+                                              <div key={test._id} className="content-item test-item">
+                                                <FaClipboardList />
+                                                <span>{test.title}</span>
+                                                <span className="test-duration">{test.duration} min</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                                
+                                {chapter.directTests && chapter.directTests.length > 0 && (
+                                  <div className="direct-tests">
+                                    <h4>Chapter Tests</h4>
+                                    {chapter.directTests.map((test) => (
+                                      <div key={test._id} className="content-item test-item">
+                                        <FaClipboardList />
+                                        <span>{test.title}</span>
+                                        <span className="test-duration">{test.duration} min</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="quick-actions">
+        <button 
+          className="action-btn primary"
+          onClick={() => navigate('/student/live-classes')}
+        >
+          Live Classes
+        </button>
+        <button 
+          className="action-btn secondary"
+          onClick={() => navigate('/student/dashboard')}
+        >
+          Back to Dashboard
+        </button>
       </div>
     </div>
   );
