@@ -57,10 +57,6 @@ externalPort = 3001
 localPort = 45743
 externalPort = 5000
 
-[[ports]]
-localPort = 46663
-externalPort = 5173
-
 [deployment]
 deploymentTarget = "vm"
 run = ["bash", "-c", "cd Frontend1 && npm run dev:full"]
