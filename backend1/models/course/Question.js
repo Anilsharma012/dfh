@@ -4,35 +4,47 @@ const questionSchema = new mongoose.Schema({
   testId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Test",
-    required: true
+    required: true,
+  },
+  test: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Test",
   },
   questionText: {
     type: String,
-    required: true
+    required: true,
   },
   direction: {
     type: String,
     default: ""
   },
   options: {
-    type: [String],
-    validate: [optArray => optArray.length >= 2, "At least two options required"]
+    A: { type: String, required: true },
+    B: { type: String, required: true },
+    C: { type: String, required: true },
+    D: { type: String, required: true }
   },
-  correctOptionIndex: {
-    type: Number,
-    required: true
-  },
-  marks: {
-    type: Number,
-    default: 3
-  },
-  negativeMarks: {
-    type: Number,
-    default: 1
+  correctOption: {
+    type: String,
+    enum: ["A", "B", "C", "D"],
+    required: true,
   },
   explanation: {
     type: String,
-    default: ""
+    default: "",
+  },
+  difficulty: {
+    type: String,
+    enum: ["Easy", "Medium", "Hard"],
+    default: "Medium",
+  },
+  marks: {
+    type: Number,
+    default: 2,
+  },
+  negativeMarks: {
+    type: Number,
+    default: 0.66,
   },
   type: {
     type: String,
@@ -45,8 +57,8 @@ const questionSchema = new mongoose.Schema({
   },
   isActive: {
     type: Boolean,
-    default: true
-  }
+    default: true,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.models.Question || mongoose.model("Question", questionSchema);
