@@ -682,6 +682,20 @@ const createQuestion = async (req, res) => {
 
     await question.save();
 
+    // Link question to the test's section
+    const sectionIndex = test.sections.findIndex(s => s.name === section);
+    if (sectionIndex !== -1) {
+      // Add question ObjectId to the section's questions array
+      if (!test.sections[sectionIndex].questions) {
+        test.sections[sectionIndex].questions = [];
+      }
+      test.sections[sectionIndex].questions.push(question._id);
+      await test.save();
+      console.log(`✅ Question linked to section ${section} in test`);
+    } else {
+      console.log(`⚠️ Section ${section} not found in test, question created but not linked`);
+    }
+
     console.log('✅ Mock test question created successfully');
     res.status(201).json({
       success: true,

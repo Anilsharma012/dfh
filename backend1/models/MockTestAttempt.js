@@ -30,6 +30,19 @@ const sectionWiseStatsSchema = new Schema(
   { _id: false }
 );
 
+// Section state for session persistence
+const sectionStateSchema = new Schema(
+  {
+    sectionKey: { type: String, required: true }, // VARC, DILR, QA
+    startedAt: { type: Date },
+    remainingSeconds: { type: Number }, // Time remaining when session was saved
+    isLocked: { type: Boolean, default: false }, // True when section time is up
+    isCompleted: { type: Boolean, default: false },
+    completedAt: { type: Date }
+  },
+  { _id: false }
+);
+
 const mockTestAttemptSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -45,9 +58,17 @@ const mockTestAttemptSchema = new Schema(
       default: 'NOT_STARTED'
     },
 
+    // Session persistence fields
+    currentSectionKey: { type: String }, // Current active section (VARC, DILR, QA)
+    currentSectionIndex: { type: Number, default: 0 }, // Index of current section
+    currentQuestionIndex: { type: Number, default: 0 }, // Index of current question in section
+    sectionStates: [sectionStateSchema], // State of each section for resume
+    lastSyncedAt: { type: Date }, // Last time progress was saved
+
     totalScore: { type: Number, default: 0 },
     totalMaxScore: { type: Number, default: 0 },
     totalTimeTakenSeconds: { type: Number, default: 0 },
+    totalDuration: { type: Number }, // Total test duration in minutes
 
     responses: [questionResponseSchema],
     sectionWiseStats: [sectionWiseStatsSchema],

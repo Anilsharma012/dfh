@@ -309,6 +309,16 @@ const startTestAttempt = async (req, res) => {
       }
     }
 
+    // Initialize section states for session persistence
+    const initialSectionStates = test.sections.map((section, index) => ({
+      sectionKey: section.name,
+      startedAt: index === 0 ? new Date() : null, // Only first section starts immediately
+      remainingSeconds: section.duration * 60, // Convert minutes to seconds
+      isLocked: false,
+      isCompleted: false,
+      completedAt: null
+    }));
+
     // Create new attempt
     const newAttempt = new MockTestAttempt({
       userId: userId,
@@ -316,6 +326,12 @@ const startTestAttempt = async (req, res) => {
       seriesId: test.seriesId._id,
       totalDuration: test.duration,
       startedAt: new Date(),
+      status: 'IN_PROGRESS',
+      currentSectionKey: test.sections[0]?.name || 'VARC',
+      currentSectionIndex: 0,
+      currentQuestionIndex: 0,
+      sectionStates: initialSectionStates,
+      lastSyncedAt: new Date(),
       responses: []
     });
 
@@ -324,9 +340,36 @@ const startTestAttempt = async (req, res) => {
     // Get questions for the test
     const questionsWithSections = [];
     for (const section of test.sections) {
-      const questions = await MockTestQuestion.find({
-        _id: { $in: section.questions }
-      }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds');
+      let questions = [];
+      
+      // First try to get questions from section.questions array
+      if (section.questions && section.questions.length > 0) {
+        questions = await MockTestQuestion.find({
+          _id: { $in: section.questions }
+        }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds').sort({ sequenceNumber: 1 });
+      }
+      
+      // Fallback: If no questions found in section.questions, query by testPaperId and section name
+      if (questions.length === 0) {
+        console.log(`🔄 Fallback: Querying questions for section ${section.name} by testPaperId`);
+        questions = await MockTestQuestion.find({
+          testPaperId: testId,
+          section: section.name,
+          isActive: true
+        }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds').sort({ sequenceNumber: 1 });
+        
+        // Also update the test's section with these question IDs for future use
+        if (questions.length > 0) {
+          const sectionIndex = test.sections.findIndex(s => s.name === section.name);
+          if (sectionIndex !== -1) {
+            test.sections[sectionIndex].questions = questions.map(q => q._id);
+            await test.save();
+            console.log(`✅ Updated section ${section.name} with ${questions.length} question IDs`);
+          }
+        }
+      }
+      
+      console.log(`📝 Section ${section.name}: Found ${questions.length} questions`);
       
       questionsWithSections.push({
         name: section.name,
@@ -445,6 +488,188 @@ const saveResponse = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to save response',
+      error: error.message
+    });
+  }
+};
+
+// Sync session progress (heartbeat endpoint for session persistence)
+const syncProgress = async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const { 
+      currentSectionIndex, 
+      currentQuestionIndex, 
+      currentSectionKey,
+      sectionStates,
+      responses 
+    } = req.body;
+    const userId = req.user.id;
+
+    console.log(`🔄 Syncing progress for attempt: ${attemptId}`);
+
+    const attempt = await MockTestAttempt.findOne({
+      _id: attemptId,
+      userId: userId
+    });
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test attempt not found'
+      });
+    }
+
+    if (attempt.status === 'COMPLETED' || attempt.status === 'EXPIRED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot sync progress for completed/expired test'
+      });
+    }
+
+    // Update session state
+    if (currentSectionIndex !== undefined) attempt.currentSectionIndex = currentSectionIndex;
+    if (currentQuestionIndex !== undefined) attempt.currentQuestionIndex = currentQuestionIndex;
+    if (currentSectionKey) attempt.currentSectionKey = currentSectionKey;
+    if (sectionStates && Array.isArray(sectionStates)) attempt.sectionStates = sectionStates;
+    
+    // Update responses if provided
+    if (responses && Array.isArray(responses)) {
+      for (const resp of responses) {
+        const existingIndex = attempt.responses.findIndex(
+          r => r.questionId.toString() === resp.questionId
+        );
+        
+        if (existingIndex >= 0) {
+          attempt.responses[existingIndex] = {
+            ...attempt.responses[existingIndex].toObject(),
+            ...resp
+          };
+        } else {
+          attempt.responses.push(resp);
+        }
+      }
+    }
+    
+    attempt.lastSyncedAt = new Date();
+    attempt.status = 'IN_PROGRESS';
+
+    await attempt.save();
+
+    console.log('✅ Progress synced successfully');
+    res.status(200).json({
+      success: true,
+      message: 'Progress synced successfully',
+      lastSyncedAt: attempt.lastSyncedAt
+    });
+  } catch (error) {
+    console.error('❌ Error syncing progress:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync progress',
+      error: error.message
+    });
+  }
+};
+
+// Transition to next section (with strict time enforcement)
+const transitionSection = async (req, res) => {
+  try {
+    const { attemptId } = req.params;
+    const { currentSectionKey, nextSectionKey, sectionTimeSpent } = req.body;
+    const userId = req.user.id;
+
+    console.log(`🔀 Section transition for attempt: ${attemptId} from ${currentSectionKey} to ${nextSectionKey}`);
+
+    const attempt = await MockTestAttempt.findOne({
+      _id: attemptId,
+      userId: userId
+    }).populate('testPaperId');
+
+    if (!attempt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test attempt not found'
+      });
+    }
+
+    if (attempt.status === 'COMPLETED' || attempt.status === 'EXPIRED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot transition section for completed/expired test'
+      });
+    }
+
+    // Find and update current section state
+    let currentSectionState = attempt.sectionStates.find(s => s.sectionKey === currentSectionKey);
+    if (currentSectionState) {
+      currentSectionState.isCompleted = true;
+      currentSectionState.completedAt = new Date();
+      currentSectionState.isLocked = true;
+      if (sectionTimeSpent) {
+        currentSectionState.remainingSeconds = 0;
+      }
+    } else {
+      // Create section state if it doesn't exist
+      attempt.sectionStates.push({
+        sectionKey: currentSectionKey,
+        isCompleted: true,
+        completedAt: new Date(),
+        isLocked: true,
+        remainingSeconds: 0
+      });
+    }
+
+    // Find next section index
+    const test = attempt.testPaperId;
+    const nextSectionIndex = test.sections.findIndex(s => s.name === nextSectionKey);
+    
+    if (nextSectionIndex === -1 && nextSectionKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Next section not found'
+      });
+    }
+
+    // Initialize next section state if exists
+    if (nextSectionKey) {
+      const nextSection = test.sections[nextSectionIndex];
+      let nextSectionState = attempt.sectionStates.find(s => s.sectionKey === nextSectionKey);
+      
+      if (!nextSectionState) {
+        attempt.sectionStates.push({
+          sectionKey: nextSectionKey,
+          startedAt: new Date(),
+          remainingSeconds: nextSection.duration * 60, // Convert minutes to seconds
+          isLocked: false,
+          isCompleted: false
+        });
+      } else if (!nextSectionState.startedAt) {
+        nextSectionState.startedAt = new Date();
+        nextSectionState.remainingSeconds = nextSection.duration * 60;
+      }
+
+      attempt.currentSectionKey = nextSectionKey;
+      attempt.currentSectionIndex = nextSectionIndex;
+      attempt.currentQuestionIndex = 0;
+    }
+
+    attempt.lastSyncedAt = new Date();
+    await attempt.save();
+
+    console.log('✅ Section transition completed successfully');
+    res.status(200).json({
+      success: true,
+      message: 'Section transition completed',
+      currentSectionKey: attempt.currentSectionKey,
+      currentSectionIndex: attempt.currentSectionIndex,
+      sectionStates: attempt.sectionStates
+    });
+  } catch (error) {
+    console.error('❌ Error transitioning section:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to transition section',
       error: error.message
     });
   }
@@ -602,9 +827,36 @@ const getAttemptData = async (req, res) => {
     const questionsWithSections = [];
 
     for (const section of test.sections) {
-      const questions = await MockTestQuestion.find({
-        _id: { $in: section.questions }
-      }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds');
+      let questions = [];
+      
+      // First try to get questions from section.questions array
+      if (section.questions && section.questions.length > 0) {
+        questions = await MockTestQuestion.find({
+          _id: { $in: section.questions }
+        }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds').sort({ sequenceNumber: 1 });
+      }
+      
+      // Fallback: If no questions found in section.questions, query by testPaperId and section name
+      if (questions.length === 0) {
+        console.log(`🔄 Resume fallback: Querying questions for section ${section.name} by testPaperId`);
+        questions = await MockTestQuestion.find({
+          testPaperId: test._id,
+          section: section.name,
+          isActive: true
+        }).select('_id questionText passage questionType section images options marks sequenceNumber correctOptionIds').sort({ sequenceNumber: 1 });
+        
+        // Also update the test's section with these question IDs for future use
+        if (questions.length > 0) {
+          const sectionIndex = test.sections.findIndex(s => s.name === section.name);
+          if (sectionIndex !== -1) {
+            test.sections[sectionIndex].questions = questions.map(q => q._id);
+            await test.save();
+            console.log(`✅ Updated section ${section.name} with ${questions.length} question IDs`);
+          }
+        }
+      }
+      
+      console.log(`📝 Resume - Section ${section.name}: Found ${questions.length} questions`);
 
       questionsWithSections.push({
         name: section.name,
@@ -847,7 +1099,9 @@ module.exports = {
   startTestAttempt,
   getAttemptData,
   saveResponse,
+  syncProgress,
+  transitionSection,
   submitTest,
   getTestHistory,
-   getMockTestTree 
+  getMockTestTree 
 };
