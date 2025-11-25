@@ -1,0 +1,79 @@
+/* Container */
+.CET2025-wrap {
+  max-width: 1080px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  font-family: "Segoe UI", sans-serif;
+  color: #1c1c1c;
+}
+
+/* Title */
+.CET2025-title {
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #0b0b0b;
+  text-align: left;
+}
+
+/* Responsive YouTube */
+.CET2025-video {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 14px 0 22px;
+}
+.CET2025-video iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Sections */
+.CET2025-section { margin-top: 22px; }
+.CET2025-h2 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 10px 0 12px;
+  color: #0b278f;
+}
+.CET2025-p {
+  font-size: 16px;
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+
+/* Lists */
+.CET2025-list,
+.CET2025-olist {
+  margin: 8px 0 14px 20px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* Note & muted */
+.CET2025-muted {
+  font-size: 14px;
+  color: #666;
+}
+.CET2025-note {
+  margin: 14px 0 18px;
+  padding: 12px 16px;
+  background: #f8f8ff;
+  border-left: 4px solid #0b278f;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .CET2025-title { font-size: 30px; }
+  .CET2025-h2 { font-size: 22px; }
+  .CET2025-p, .CET2025-list, .CET2025-olist { font-size: 15px; }
+}

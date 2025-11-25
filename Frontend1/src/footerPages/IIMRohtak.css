@@ -1,0 +1,88 @@
+/* Wrapper */
+.IIM-Rohtak-wrap {
+  max-width: 1080px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #1c1c1c;
+}
+
+/* Title */
+.IIM-Rohtak-title {
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #0b0b0b;
+}
+
+/* Responsive YouTube */
+.IIM-Rohtak-video {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 14px 0 22px;
+}
+.IIM-Rohtak-video iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Headings & text */
+.IIM-Rohtak-h2 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 26px 0 10px;
+  color: #0b278f;
+}
+.IIM-Rohtak-h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 18px 0 8px;
+  color: #0f195f;
+}
+.IIM-Rohtak-p {
+  font-size: 16px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+/* Lists */
+.IIM-Rohtak-list,
+.IIM-Rohtak-olist {
+  margin: 8px 0 14px 20px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* Notes */
+.IIM-Rohtak-note {
+  margin: 16px 0 22px;
+  padding: 12px 16px;
+  background: #f8f8ff;
+  border-left: 4px solid #0b278f;
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Links */
+.IIM-Rohtak-link {
+  color: #0b278f;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+/* Mobile tweaks */
+@media (max-width: 520px) {
+  .IIM-Rohtak-title { font-size: 30px; }
+  .IIM-Rohtak-h2 { font-size: 22px; }
+  .IIM-Rohtak-p,
+  .IIM-Rohtak-list,
+  .IIM-Rohtak-olist { font-size: 15px; }
+}

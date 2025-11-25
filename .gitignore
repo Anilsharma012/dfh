@@ -1,0 +1,16 @@
+﻿# OS / editor
+.DS_Store
+Thumbs.db
+
+# Node / build
+node_modules/
+dist/
+build/
+
+# Replit / local state junk
+.local/
+.replit/
+*.bin
+*.bin.*
+*.log
+.env

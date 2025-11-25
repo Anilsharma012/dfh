@@ -1,0 +1,117 @@
+:root{
+  --cocp-font:"Manrope","Inter","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+  --cocp-weight-heading:700; --cocp-weight-strong:600; --cocp-weight-body:500;
+  --cocp-size-title:clamp(22px,2.0vw,28px); --cocp-size-h:clamp(20px,1.9vw,26px);
+  --cocp-size-sub:18px; --cocp-size-body:16px; --cocp-size-small:14px; --cocp-line:1.55;
+  --cocp-primary:#1A237E; --cocp-accent:#D8583F; --cocp-ink:#1d1d1f; --cocp-ink-2:#111; --cocp-muted:#888; --cocp-border:#999;
+}
+
+/* reset */
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--cocp-font);font-size:var(--cocp-size-body);font-weight:var(--cocp-weight-body);line-height:var(--cocp-line);background:#f4f6f8;color:var(--cocp-ink)}
+.container{max-width:1600px;width:100%;margin:0 auto}
+.row{display:flex;gap:30px}
+
+/* page */
+.cocp-page{background:#fff;padding-top:40px}
+
+/* left */
+.cocp-left{flex:70%;padding-left:50px}
+.cocp-video iframe{width:100%;height:400px;border-radius:10px;border:none;margin-bottom:20px}
+.cocp-title{text-transform:uppercase;letter-spacing:.4px;color:var(--cocp-primary);font-size:var(--cocp-size-title);font-weight:var(--cocp-weight-heading);margin-bottom:25px}
+
+/* info grid */
+.cocp-info-grid{display:flex;gap:0;margin-bottom:30px;flex-wrap:wrap}
+.cocp-info-item{display:flex;align-items:center;gap:10px;min-width:220px;flex:1}
+.cocp-ico{font-size:22px;color:#005ae0}
+.cocp-label{font-size:var(--cocp-size-small);color:var(--cocp-muted);font-weight:var(--cocp-weight-body)}
+.cocp-val{font-size:var(--cocp-size-body);color:var(--cocp-ink-2);font-weight:var(--cocp-weight-strong)}
+
+/* right */
+.cocp-right{flex:0 0 30%;display:flex;flex-direction:column;gap:30px}
+.cocp-course-info{background:#fff;padding:25px;border-radius:12px;border:1px solid var(--cocp-border);box-shadow:0 0 10px rgba(0,0,0,.05)}
+.cocp-course-title{background:#EFF0FF;color:var(--cocp-primary);font-weight:var(--cocp-weight-heading);padding:12px 15px;border-radius:8px;font-size:var(--cocp-size-title);text-align:center;margin-bottom:25px}
+.cocp-buy-btn{
+  width:100%;
+  padding:10px 12px;
+  background:#1d0a71;
+  color:#fff;
+  font-weight:var(--cocp-weight-heading);
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-size:var(--cocp-size-body);
+  margin-top:15px;
+  transition:background .3s ease
+}
+.cocp-buy-btn:hover{background:#1b0a66}
+
+.cocp-desc-scroll{max-height:220px;overflow-y:auto;padding-right:5px}
+.cocp-desc-scroll::-webkit-scrollbar{width:0;background:transparent}
+.cocp-material-box{background:#fff;padding:25px;border:1px solid var(--cocp-border);border-radius:12px;box-shadow:0 0 10px rgba(0,0,0,.05)}
+.cocp-material-box h4{font-size:var(--cocp-size-sub);font-weight:var(--cocp-weight-heading);color:#000;margin-bottom:12px;text-align:left}
+.cocp-material-list{list-style:disc; text-align:left;padding-left:20px;color:#000;font-size:15px;}
+.cocp-material-list li{margin-bottom:8px}
+
+/* tabs */
+.cocp-tabs{margin-top:40px}
+.cocp-tab-buttons{display:flex;gap:15px;margin-bottom:25px;flex-wrap:wrap}
+.cocp-tab-btn{border:2px solid var(--cocp-primary);background:transparent;color:var(--cocp-primary);font-weight:var(--cocp-weight-heading);font-size:var(--cocp-size-body);padding:8px 24px;border-radius:16px;cursor:pointer;transition:.3s}
+.cocp-tab-btn:hover{background:#eaeaff}
+.cocp-tab-btn.active{background:var(--cocp-primary);color:#fff;border-color:var(--cocp-primary)}
+
+.cocp-tab-content h3,
+.cocp-curriculum h3,
+.cocp-instructors h3,
+.cocp-reviews h3{font-size:var(--cocp-size-h);font-weight:var(--cocp-weight-heading);color:#000;text-align:left;margin-bottom:18px}
+.cocp-tab-content p{font-size:var(--cocp-size-body);font-weight:var(--cocp-weight-body);color:#000;text-align:left;margin-bottom:18px}
+
+/* curriculum */
+.cocp-curriculum{margin-top:40px}
+.cocp-curriculum-item{border:1px solid #ddd;border-radius:10px;margin-bottom:15px;background:#fff;padding:15px 20px;cursor:pointer;transition:all .3s ease}
+.cocp-curriculum-item:hover{background:#f9f9ff}
+.cocp-curriculum-title{display:flex;justify-content:space-between;font-weight:var(--cocp-weight-heading);font-size:18px;color:var(--cocp-primary)}
+.cocp-curriculum-content{margin-top:10px;font-size:var(--cocp-size-body);font-weight:var(--cocp-weight-body);color:#000;text-align:left}
+.cocp-arrow{font-size:18px;color:#2f2f2f}
+
+/* instructors */
+.cocp-instructor-grid{display:flex;gap:20px;flex-wrap:wrap}
+.cocp-instructor-card{flex:1 1 30%;border-radius:15px;overflow:hidden;background:#f0f2ff;box-shadow:0 0 8px rgba(0,0,0,.05);text-align:center;display:flex;flex-direction:column;justify-content:space-between}
+.cocp-instructor-img{background:#0c1a66;padding:20px}
+.cocp-instructor-img img{width:100%;max-height:250px;object-fit:contain;border-radius:8px}
+.cocp-instructor-info{padding:15px;background:#f0f2ff;font-size:var(--cocp-size-body);font-weight:var(--cocp-weight-strong);color:var(--cocp-ink);line-height:1.4;text-align:left}
+
+/* reviews */
+.cocp-reviews{margin-top:40px}
+.cocp-review-layout{display:flex;flex-direction:column;gap:30px}
+
+.cocp-rating-summary{display:flex;align-items:flex-start;gap:20px}
+.cocp-rating-score{font-size:40px;font-weight:var(--cocp-weight-heading);line-height:1}
+.cocp-rating-stars{position:relative;display:inline-block;line-height:1;color:orange;font-size:18px;margin:5px 0}
+.cocp-stars-outer{color:#ddd}
+.cocp-stars-inner{position:absolute;top:0;left:0;width:var(--percent,0%);overflow:hidden;color:orange;white-space:nowrap;pointer-events:none}
+.cocp-total-rating{font-size:var(--cocp-size-small);color:#555}
+
+.cocp-rating-bars{flex:1}
+.cocp-bar-line{display:flex;align-items:center;font-size:var(--cocp-size-small);margin-bottom:10px}
+.cocp-bar-line .cocp-bar{flex:1;height:6px;background:#ddd;margin:0 10px;border-radius:5px;overflow:hidden}
+.cocp-bar-line .cocp-fill{background:var(--cocp-primary);height:100%}
+
+.cocp-review-image-box{flex:0 0 55%;background:transparent;display:flex;align-items:center}
+.cocp-review-image-box img{width:100%;max-width:600px;height:300px;border-radius:12px;object-fit:contain}
+
+/* extra imgs */
+.cocp-reviews-gallery{display:flex;gap:16px;margin-top:18px;flex-wrap:wrap}
+.cocp-reviews-gallery img{flex:1 1 calc(33.333% - 11px);max-width:calc(33.333% - 11px);height:240px;object-fit:contain;background:#fff;border:1px solid #e6e6e6;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.05);padding:8px}
+@media (max-width:992px){.cocp-reviews-gallery img{flex-basis:calc(50% - 8px);max-width:calc(50% - 8px);height:180px}}
+
+/* journey (optional, not used) */
+.cocp-journey{margin-top:40px;display:flex;justify-content:center;background:#080A22}
+.cocp-journey-image{width:100%;height:auto;object-fit:cover}
+
+/* mobile */
+@media (max-width:768px){
+  .row{flex-direction:column;gap:40px}
+  .cocp-left{padding-left:0}
+  .cocp-video iframe{height:250px}
+}

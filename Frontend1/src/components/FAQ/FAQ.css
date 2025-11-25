@@ -1,0 +1,338 @@
+  .tsp-faq-section {
+    display: flex;
+    background-color: #0c0f25;
+    color: white;
+    padding: 80px 78px;
+    font-family: 'Poppins', sans-serif;
+    justify-content: space-between;
+    gap: 60px;
+    flex-wrap: wrap;
+  }
+
+  .tsp-faq-left {
+    flex: 1;
+    max-width: 500px;
+  }
+
+  .tsp-faq-left h5 {
+    color: #EE6A4D;
+    text-transform: uppercase;
+    font-size: 20px;
+    display: flex;
+    font-weight: 500;
+    margin-bottom: 20px;
+  }
+
+  .tsp-faq-left h2 {
+    font-size: 48px;
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    line-height: 1.1;
+    margin-bottom: 10px;
+    font-family: 'DM Serif Display', serif;
+  }
+
+  .tsp-faq-left p {
+    font-size: 16px;
+    font-weight: 500;
+    color: #d0d3f2;
+    margin-bottom: 30px;
+    display: block;
+    text-align: left;
+  }
+
+  .tsp-faq-left button {
+    background: #D8583F;
+    color: white;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
+    padding: 14px 24px;
+    display: inline-flex;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .tsp-faq-right {
+    flex: 1.2;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 750px;
+  }
+
+  .tsp-faq-item {
+    background: transparent;
+    border-bottom: 1px solid #2e314e;
+    padding-bottom: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .tsp-faq-item.open .tsp-faq-answer {
+    margin-top: 10px;
+    font-size: 15px;
+    color: #d0d3f2;
+    line-height: 1.6;
+    display: block;
+    text-align: left;
+  }
+
+  .tsp-faq-question {
+    font-size: 20px;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+  }
+
+  .tsp-faq-toggle {
+    font-size: 26px;
+    font-weight: 700;
+    color: white;
+  }
+
+  /* ---------- Responsive Design ---------- */
+  @media (max-width: 1200px) {
+    .tsp-faq-section {
+      gap: 40px;
+      padding: 60px 50px;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .tsp-faq-section {
+      flex-direction: column;
+      padding: 50px 30px;
+    }
+
+    .tsp-faq-left,
+    .tsp-faq-right {
+      max-width: 100%;
+    }
+
+    .tsp-faq-left h2 {
+      font-size: 40px;
+    }
+
+    .tsp-faq-left h5 {
+      font-size: 18px;
+    }
+
+    .tsp-faq-left p {
+      font-size: 14px;
+      margin-top: 20px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .tsp-faq-section {
+      padding: 40px 20px;
+    }
+
+    .tsp-faq-left h2 {
+      font-size: 32px;
+    }
+
+    .tsp-faq-left h5 {
+      font-size: 16px;
+    }
+
+    .tsp-faq-question {
+      font-size: 18px;
+    }
+
+    .tsp-faq-toggle {
+      font-size: 22px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .tsp-faq-left h2 {
+      font-size: 28px;
+      margin-top: -1px;
+    }
+
+    .tsp-faq-left button {
+      padding: 12px 20px;
+      font-size: 14px;
+    }
+
+    .tsp-faq-question {
+      font-size: 16px;
+    }
+
+    .tsp-faq-toggle {
+      font-size: 20px;
+    }
+
+    .tsp-faq-section {
+      padding: 30px 15px;
+    }
+  }
+
+
+
+  /* ---------- Professional Modal Styles ---------- */
+
+.tg-modal-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 12, 56, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.tg-modal{
+  width: clamp(360px, 92vw, 640px);
+  max-height: 90vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(11,16,81,0.35);
+  position: relative;
+  animation: tgModalIn .18s ease-out;
+}
+
+@keyframes tgModalIn {
+  from { transform: translateY(12px); opacity: .6; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.tg-modal-header{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(90deg, #0b1051 0%, #192086 100%);
+  color: #fff;
+  border-radius: 16px 16px 0 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.tg-modal-header h3{
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+
+.tg-modal-close{
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.tg-modal-close:hover{ background: rgba(255,255,255,0.2); transform: translateY(-1px); }
+
+.tg-form{
+  padding: 18px 20px 20px;
+}
+
+.tg-form-group{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.tg-form-row{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+/* Labels */
+.tg-form-group label{
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #0b1051;
+}
+
+/* Inputs & Textarea */
+.tg-form-group input,
+.tg-form-group textarea{
+  width: 100%;
+  border: 1.5px solid #e7e9fe;
+  background: #fafbff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+
+.tg-form-group textarea{
+  min-height: 110px;
+  resize: vertical;
+}
+
+.tg-form-group input::placeholder,
+.tg-form-group textarea::placeholder{
+  color: #9aa0c3;
+}
+
+.tg-form-group input:focus,
+.tg-form-group textarea:focus{
+  border-color: #6366f1; /* soft indigo */
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.14);
+}
+
+/* Actions */
+.tg-form-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.tg-btn{
+  background: linear-gradient(90deg, #192086 0%, #0b1051 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(11,16,81,0.25);
+  transition: transform .08s ease, box-shadow .2s ease, opacity .2s ease;
+}
+
+.tg-btn:hover{ box-shadow: 0 10px 22px rgba(11,16,81,0.28); }
+.tg-btn:active{ transform: translateY(1px); }
+
+.tg-btn.ghost{
+  background: #f3f4ff;
+  color: #192086;
+  box-shadow: none;
+  border: 1px solid #e7e9fe;
+}
+
+/* Mobile stacking earlier to avoid overflow */
+@media (max-width: 640px){
+  .tg-form-row{ grid-template-columns: 1fr; }
+  .tg-modal{ width: min(94vw, 520px); }
+  .tg-modal-close{ width: 32px; height: 32px; }
+}

@@ -1,0 +1,180 @@
+/* Manrope only in this component */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300..800&display=swap');
+
+/* ---- Theme tokens (tweak here to match screenshot 1:1) ---- */
+.tgcs-section {
+  --tgcs-cream: #FFF0DE;    /* soft cream background of card */
+  --tgcs-text: #0f0f0f;
+  --tgcs-muted: #1a1a1a;
+  --tgcs-orange: #e34e2a;    /* primary brand orange */
+  --tgcs-orange-soft: rgba(227, 78, 42, 0.12);
+  --tgcs-shadow: 0 10px 24px rgba(0,0,0,0.06);
+  --tgcs-radius-card: 24px;
+  --tgcs-radius-img: 14px;
+}
+
+/* Strict scope + font */
+.tgcs-section, .tgcs-section * {
+  font-family: "Manrope", sans-serif;
+  box-sizing: border-box;
+}
+
+/* Container */
+.tgcs-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px 12px;
+}
+
+/* Grid: 2 cards per row on desktop */
+.tgcs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+}
+@media (min-width: 900px) {
+  .tgcs-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Card: left image + right content */
+.tgcs-card {
+  background: var(--tgcs-cream);
+  border-radius: var(--tgcs-radius-card);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 42% 58%;
+  gap: 24px;
+  align-items: stretch;
+  box-shadow: var(--tgcs-shadow);
+}
+@media (max-width: 720px) {
+  .tgcs-card { grid-template-columns: 1fr; }
+}
+ 
+/* LEFT image block (tall like screenshot) */
+.tgcs-thumb {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--tgcs-radius-img);
+  min-height: 420px;              /* adjust 380–460 to match exact shot */
+  background: #c7cbe3;            /* fallback tone behind image */
+  display: flex;
+}
+.tgcs-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;    /* common hero crop feel */
+}
+
+/* RIGHT content column */
+.tgcs-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 6px 4px;
+}
+
+/* Title big & bold like screenshot */
+.tgcs-title {
+  margin: 0 0 10px 0;
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #000000;
+}
+
+/* Single-line (or few) bullet with a tick */
+.tgcs-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tgcs-points li {
+  font-size: 16px;
+  margin: 6px 0;
+  position: relative;
+  padding-left: 20px;
+  color: #070A22;
+}
+.tgcs-points li::before {
+  content: "✓";
+  position: absolute;
+  left: 0; top: 0;
+  color: var(--tgcs-orange);
+  font-weight: 900;
+}
+
+/* Bottom row = price left + actions right */
+.tgcs-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+}
+.tgcs-price {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--tgcs-text);
+}
+
+/* Buttons */
+.tgcs-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tgcs-btn {
+  border: none;
+  cursor: pointer;
+  font-weight: 900;
+  border-radius: 12px;
+  padding: 14px 20px;
+  transition: transform .15s ease, opacity .15s ease, box-shadow .15s ease;
+  font-size: 15px;
+  line-height: 1;
+}
+.tgcs-btn-primary {
+  background: var(--tgcs-orange);
+  color: #fff;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.04);
+}
+.tgcs-btn-ghost {
+  background: var(--tgcs-orange-soft);
+  color: var(--tgcs-orange);
+}
+.tgcs-btn:hover { transform: translateY(-1px); opacity: .96; }
+
+/* small polish for reduced motion users */
+@media (prefers-reduced-motion: reduce) {
+  .tgcs-btn { transition: none; }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+.tgcs-price {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--tgcs-text);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tgcs-old-price {
+  font-size: 16px;
+  color: #888;
+  text-decoration: line-through;
+  font-weight: 500;
+  margin-top: 4px;
+}

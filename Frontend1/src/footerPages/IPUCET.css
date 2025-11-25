@@ -1,0 +1,91 @@
+/* Container */
+.IPU-wrap{
+  max-width: 1080px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  font-family: "Segoe UI", sans-serif;
+  color: #1c1c1c;
+}
+
+/* Title */
+.IPU-title{
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #0b0b0b;
+}
+
+/* Responsive YouTube */
+.IPU-video{
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 14px 0 22px;
+}
+.IPU-video iframe{
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Sections & headings */
+.IPU-section{ margin-top: 22px; }
+.IPU-h2{
+  font-size: 26px;
+  font-weight: 700;
+  margin: 10px 0 12px;
+  color: #0b278f;
+}
+.IPU-h3{
+  font-size: 20px;
+  font-weight: 700;
+  margin: 10px 0 8px;
+  color: #0b278f;
+}
+.IPU-p{ font-size: 16px; line-height: 1.7; margin-bottom: 10px; }
+
+/* Lists */
+.IPU-list{
+  margin: 8px 0 14px 20px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.IPU-tight li{ margin: 2px 0; }
+
+/* Note box */
+.IPU-note{
+  margin: 12px 0 14px;
+  padding: 12px 16px;
+  background: #f8f8ff;
+  border-left: 4px solid #0b278f;
+  border-radius: 6px;
+}
+
+/* Grid list for long sets */
+.IPU-grid{
+  list-style: disc;
+  padding-left: 20px;
+  column-gap: 36px;
+}
+@media (min-width: 900px){
+  .IPU-grid{ columns: 2; }
+}
+@media (min-width: 1280px){
+  .IPU-grid{ columns: 3; }
+}
+
+/* Links */
+.IPU-link{ color:#0b278f; text-decoration: underline; }
+
+/* Mobile */
+@media (max-width: 520px){
+  .IPU-title{ font-size: 30px; }
+  .IPU-h2{ font-size: 22px; }
+  .IPU-p, .IPU-list{ font-size: 15px; }
+  .IPU-grid{ columns: 1; }
+}

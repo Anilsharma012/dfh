@@ -1,0 +1,79 @@
+/* Container */
+.CHRIST-wrap{
+  max-width: 1080px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  font-family: "Segoe UI", sans-serif;
+  color: #1c1c1c;
+}
+
+/* Title */
+.CHRIST-title{
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: #0b0b0b;
+}
+
+/* Responsive YouTube */
+.CHRIST-video{
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 14px 0 22px;
+}
+.CHRIST-video iframe{
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Sections & text */
+.CHRIST-section{ margin-top: 22px; }
+.CHRIST-h2{
+  font-size: 26px;
+  font-weight: 700;
+  margin: 10px 0 12px;
+  color: #0b278f;
+}
+.CHRIST-h3{
+  font-size: 20px;
+  font-weight: 700;
+  margin: 8px 0 10px;
+  color: #0b278f;
+}
+.CHRIST-p{ font-size: 16px; line-height: 1.7; margin-bottom: 10px; }
+
+/* Lists */
+.CHRIST-list{
+  margin: 8px 0 14px 20px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.CHRIST-tight li{ margin: 2px 0; }
+
+/* Big list grid (courses) */
+.CHRIST-grid{
+  list-style: disc;
+  padding-left: 20px;
+  column-gap: 40px;
+}
+@media (min-width: 900px){
+  .CHRIST-grid{ columns: 2; }   /* two columns on large screens */
+}
+@media (min-width: 1280px){
+  .CHRIST-grid{ columns: 3; }   /* optional: three on very wide screens */
+}
+
+/* Mobile adjustments */
+@media (max-width: 520px){
+  .CHRIST-title{ font-size: 30px; }
+  .CHRIST-h2{ font-size: 22px; }
+  .CHRIST-p, .CHRIST-list{ font-size: 15px; }
+  .CHRIST-grid{ columns: 1; }
+}

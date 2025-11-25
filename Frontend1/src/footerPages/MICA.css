@@ -1,0 +1,86 @@
+.MICA-wrap {
+  max-width: 1080px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  font-family: "Segoe UI", sans-serif;
+  color: #1c1c1c;
+}
+
+.MICA-title {
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 700;
+  margin-bottom: 18px;
+  color: #0b0b0b;
+}
+
+.MICA-h2 {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 26px 0 10px;
+  color: #0b278f;
+}
+
+.MICA-h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 20px 0 8px;
+}
+
+.MICA-p {
+  font-size: 16px;
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+
+.MICA-bullets,
+.MICA-list {
+  margin: 8px 0 14px 20px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+.MICA-sublist {
+  margin: 6px 0 0 18px;
+}
+
+.MICA-table-scroll {
+  overflow-x: auto;
+  margin: 10px 0 16px;
+}
+
+.MICA-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  background: #fff;
+}
+.MICA-table th,
+.MICA-table td {
+  border: 1px solid #e7e7ee;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.MICA-table thead th {
+  background: #f6f7ff;
+  font-weight: 700;
+}
+.MICA-table tbody tr:nth-child(even) td {
+  background: #fafbff;
+}
+.MICA-total td {
+  background: #eef1ff;
+}
+
+.MICA-link a {
+  color: #0b278f;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .MICA-title { font-size: 30px; }
+  .MICA-h2 { font-size: 22px; }
+  .MICA-p, .MICA-bullets, .MICA-list { font-size: 15px; }
+}

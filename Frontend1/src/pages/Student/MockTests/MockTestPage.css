@@ -1,0 +1,412 @@
+.mock-test-page {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.mocktests-header h2 {
+  margin-bottom: 4px;
+}
+
+.muted {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.badge-admin {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  background: #ffe5d9;
+  color: #b45309;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.tab {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #ddd;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.tab-active {
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.subtabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.subtab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.subtab-active {
+  background: #111827;
+  color: #fff;
+}
+
+.section-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1.1fr 1.3fr;
+  gap: 16px;
+}
+
+.section-col {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+}
+
+.section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.list-item {
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+  border: 1px solid transparent;
+}
+
+.list-item:hover {
+  background: #f3f4f6;
+}
+
+.list-item-active {
+  background: #111827;
+  color: #fff;
+}
+
+.card {
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  background: #fff;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.card-text {
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.card-meta {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.card-list {
+  display: grid;
+  gap: 12px;
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 6px 12px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-primary {
+  background: #111827;
+  color: #fff;
+}
+
+.btn-outline {
+  background: #fff;
+  border: 1px solid #d1d5db;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* tiny button for delete */
+.btn-xxs {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.page-header {
+  margin-bottom: 30px;
+}
+
+.page-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #111827;
+}
+
+.page-subtitle {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.tabs-container {
+  margin-bottom: 30px;
+}
+
+.main-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 10px;
+}
+
+.tab {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+}
+
+.tab:hover {
+  color: #111827;
+}
+
+.tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.sub-tabs {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.sub-tab {
+  padding: 8px 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.sub-tab:hover {
+  background: #e5e7eb;
+}
+
+.sub-tab.active {
+  background: #111827;
+  color: white;
+  border-color: #111827;
+}
+
+.content-container {
+  min-height: 400px;
+}
+
+.papers-container,
+.topics-container,
+.sessional-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.exam-section,
+.subject-section,
+.year-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.exam-title,
+.subject-title,
+.year-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #111827;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 10px;
+}
+
+.papers-grid,
+.topics-grid,
+.tests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.test-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 20px;
+  transition: all 0.3s;
+}
+
+.test-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.test-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.test-card-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  flex: 1;
+}
+
+.test-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.test-badge.previous-year {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.test-badge.topic-wise {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.test-badge.full {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.test-badge.series {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.test-badge.module {
+  background: #fce7f3;
+  color: #9f1239;
+}
+
+.test-badge.sessional {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.test-description {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
+.test-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 15px;
+}
+
+.start-test-btn {
+  width: 100%;
+  padding: 10px 20px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.start-test-btn:hover {
+  background: #1d4ed8;
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .papers-grid,
+  .topics-grid,
+  .tests-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main-tabs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tab {
+    text-align: left;
+  }
+}

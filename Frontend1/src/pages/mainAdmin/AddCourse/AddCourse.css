@@ -1,0 +1,239 @@
+.adminCourse-wrapper {
+  padding: 32px;
+}
+
+.adminCourse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.adminCourse-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+.adminCourse-add-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.adminCourse-add-btn {
+  background-color: #005ae0;
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 15px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.adminCourse-add-btn:hover {
+  background-color: #003f9a;
+}
+
+.adminCourse-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.adminCourse-dropdown-item {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background-color: transparent;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2c3e50;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminCourse-dropdown-item:hover {
+  background-color: #f0f4ff;
+  color: #005ae0;
+}
+
+.adminCourse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.adminCourse-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.adminCourse-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+}
+
+.adminCourse-image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  background-size: cover;
+  
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.adminCourse-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2d3d;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.adminCourse-description {
+  font-size: 14px;
+  color: #4a4a4a;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  max-height: 100px;
+  overflow: hidden;
+  text-align: left;
+}
+
+.adminCourse-price {
+  font-size: 16px;
+  color: #005ae0;
+  font-weight: bold;
+  margin-bottom: 6px;
+  text-align: right;
+}
+
+.adminCourse-date {
+  font-size: 13px;
+  color: #7f8c8d;
+  text-align: right;
+}
+
+
+.adminCourse-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.adminCourse-icon-btn {
+  border: none;
+  padding: 10px 12px;
+  font-size: 16px;
+  border-radius: 10px;
+  background: #f5f5f5;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  color: #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adminCourse-icon-btn.edit {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.adminCourse-icon-btn.edit:hover {
+  background-color: #bbdefb;
+  color: #0d47a1;
+}
+
+.adminCourse-icon-btn.delete {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.adminCourse-icon-btn.delete:hover {
+  background-color: #ffcdd2;
+  color: #b71c1c;
+}
+
+/* Add Overview action styling */
+.adminCourse-icon-btn.overview { background-color: #eef5ff; color: #0b63ce; }
+.adminCourse-icon-btn.overview:hover { background-color: #d7e8ff; color: #0048a8; }
+.adminCourse-icon-btn.videos { background-color: #e6f7f5; color: #11998e; }
+.adminCourse-icon-btn.videos:hover { background-color: #d1f2ed; color: #0d7a6f; }
+.adminCourse-action-text { margin-left: 8px; font-size: 14px; font-weight: 600; }
+
+
+.adminCourse-publish-icon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #fff;
+  border-radius: 50%;
+  padding: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  transition: transform 0.2s ease;
+}
+
+.adminCourse-publish-icon:hover {
+  transform: scale(1.05);
+}
+
+.adminCourse-image-wrap {
+  position: relative; /* ✅ required for absolute icon */
+  height: 180px;
+  overflow: hidden;
+  border-bottom: 1px solid #eee;
+}
+
+/* Overview Modal */
+.course-overview-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.course-overview-modal { background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.2); width: 100%; max-width: 720px; overflow: hidden; max-height: calc(100vh - 48px); overflow-y: auto; }
+.course-overview-modal-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eef2f6; padding: 14px 18px; }
+.course-overview-title { margin: 0; font-size: 18px; font-weight: 700; color: #1f2d3d; }
+.course-overview-subtitle { margin: 4px 0 0; color: #7f8c8d; font-size: 13px; }
+.course-overview-close { border: none; background: #f5f7fb; color: #333; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.course-overview-form { padding: 16px; }
+.course-overview-section { margin: 0 0 14px; }
+.course-overview-label { display: block; margin: 0 0 6px; font-weight: 600; color: #2c3e50; }
+.course-overview-textarea { width: 100%; border: 1px solid #e3e8ef; border-radius: 10px; padding: 10px; font-size: 14px; line-height: 1.5; resize: vertical; }
+.course-overview-hint { margin: 6px 0 0; color: #7f8c8d; font-size: 12px; }
+.course-overview-actions { display: flex; justify-content: flex-end; padding: 6px 0 0; }
+.course-overview-save { background-color: #005ae0; color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+.course-overview-save:disabled { opacity: .7; cursor: not-allowed; }
+@media (max-width:640px){ .course-overview-modal{max-width:96%; max-height: calc(100vh - 24px);} }
