@@ -157,82 +157,110 @@ const getTestDetails = async (req, res) => {
     const { testId } = req.params;
     const userId = req.user ? req.user.id : null;
 
-    console.log(`📖 Fetching test details: ${testId}${userId ? ` (authenticated user: ${userId})` : ' (guest user)'}`);
+    console.log(
+      `📖 Fetching test details: ${testId}${
+        userId ? ` (authenticated user: ${userId})` : " (guest user)"
+      }`
+    );
 
     const test = await MockTest.findById(testId)
-      .populate('seriesId', 'title category enrolledStudents')
-      .populate('createdBy', 'name');
+      .populate("seriesId", "title category enrolledStudents")
+      .populate("createdBy", "name");
 
     if (!test || !test.isActive || !test.isPublished) {
       return res.status(404).json({
         success: false,
-        message: 'Mock test not found'
+        message: "Mock test not found",
       });
     }
 
-    // Check if student has access to this test
+    // ================= ENROLLMENT CHECK =================
     const series = test.seriesId;
     let isEnrolled = false;
 
     if (userId) {
       try {
-        const mongoose = require('mongoose');
-        if (userId === '507f1f77bcf86cd799439011') {
-          isEnrolled = test.isFree; // Allow dev user access to free tests
-        } else if (mongoose.Types.ObjectId.isValid(userId) && series?.enrolledStudents) {
+        const mongoose = require("mongoose");
+
+        // Dev user ko full access de do
+        if (userId === "507f1f77bcf86cd799439011") {
+          isEnrolled = true;
+        } else if (
+          mongoose.Types.ObjectId.isValid(userId) &&
+          series?.enrolledStudents
+        ) {
           isEnrolled = series.enrolledStudents.some(
-            enrollment => enrollment.studentId && enrollment.studentId.toString() === userId
+            (enrollment) =>
+              enrollment.studentId &&
+              enrollment.studentId.toString() === userId
           );
         }
       } catch (error) {
-        console.log(`⚠️ Error checking enrollment for user ${userId}:`, error.message);
+        console.log(
+          `⚠️ Error checking enrollment for user ${userId}:`,
+          error.message
+        );
       }
     }
-    
-    console.log(`📊 Enrollment check: userId=${userId}, isFree=${test.isFree}, isEnrolled=${isEnrolled}`);
 
-    if (!test.isFree && !isEnrolled) {
+    console.log(
+      `📊 Enrollment check: userId=${userId}, isFree=${test.isFree}, isEnrolled=${isEnrolled}`
+    );
+
+    // Pehle yahin se 403 aa raha tha.
+    // Naya logic:
+    //  - Agar user GUEST hai aur test paid hai → 403
+    //  - Agar user LOGIN hai, to details de do (sirf flag bhej denge)
+    const requiresPurchase = !test.isFree && !isEnrolled;
+
+    if (!userId && requiresPurchase) {
       return res.status(403).json({
         success: false,
-        message: 'You need to purchase this mock test series to access this test'
+        message:
+          "You need to purchase this mock test series to access this test",
       });
     }
 
-    // Check if student has already attempted this test
+    // ================= EXISTING ATTEMPT CHECK =================
     let existingAttempt = null;
     if (userId) {
       try {
-        const mongoose = require('mongoose');
-        if (userId === '507f1f77bcf86cd799439011') {
-          // For dev user, don't check existing attempts to allow multiple attempts
+        const mongoose = require("mongoose");
+        if (userId === "507f1f77bcf86cd799439011") {
+          // Dev user ke liye multiple attempts allow
           existingAttempt = null;
         } else if (mongoose.Types.ObjectId.isValid(userId)) {
           existingAttempt = await MockTestAttempt.findOne({
             userId: userId,
-            testPaperId: testId
+            testPaperId: testId,
           });
         }
       } catch (error) {
-        console.log(`⚠️ Error checking existing attempt for user ${userId}:`, error.message);
+        console.log(
+          `⚠️ Error checking existing attempt for user ${userId}:`,
+          error.message
+        );
       }
     }
 
-    console.log('✅ Test details fetched successfully');
-    res.status(200).json({
+    console.log("✅ Test details fetched successfully");
+    return res.status(200).json({
       success: true,
       test,
       hasAttempted: !!existingAttempt,
-      attempt: existingAttempt
+      attempt: existingAttempt,
+      requiresPurchase, // front-end chaahe to isse UI block kar sakta hai
     });
   } catch (error) {
-    console.error('❌ Error fetching test details:', error);
-    res.status(500).json({
+    console.error("❌ Error fetching test details:", error);
+    return res.status(500).json({
       success: false,
-      message: 'Failed to fetch test details',
-      error: error.message
+      message: "Failed to fetch test details",
+      error: error.message,
     });
   }
 };
+
 
 // Start a mock test attempt
 const startTestAttempt = async (req, res) => {

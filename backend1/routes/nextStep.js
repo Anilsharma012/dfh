@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+
 const Course = require('../models/course/Course');
 const Enrollment = require('../models/Enrollment');
 const SubjectProgress = require('../models/SubjectProgress');
@@ -7,99 +8,202 @@ const Batch = require('../models/Batch');
 const Session = require('../models/Session');
 const { authMiddleware } = require('../middleware/authMiddleware');
 
+/**
+ * Rotate an array so that it starts from `start` element.
+ */
 const rotate = (arr, start) => {
-  const i = Math.max(0, arr.findIndex(x => x === start));
-  return arr.slice(i).concat(arr.slice(0,i));
-};
-const nextSubject = async (enrollment, course) => {
-  const order = rotate((course.subjects && course.subjects.length ? course.subjects : ['A','B','C','D']), course.startSubject || 'A');
-  const done = await SubjectProgress.find({ enrollmentId: enrollment._id, status: 'done' });
-  const doneSet = new Set(done.map(d => d.subject));
-  for (const s of order) { if (!doneSet.has(s)) return s; }
-  return null; // all done
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  const idx = Math.max(0, arr.findIndex((x) => x === start));
+  return arr.slice(idx).concat(arr.slice(0, idx));
 };
 
+/**
+ * Decide which subject (A/B/C/D) the student should work on next.
+ */
+const getNextSubject = async (enrollment, course) => {
+  const subjects = Array.isArray(course.subjects) && course.subjects.length
+    ? course.subjects
+    : ['A', 'B', 'C', 'D'];
+
+  const order = rotate(subjects, course.startSubject || 'A');
+
+  const doneList = await SubjectProgress.find({
+    enrollmentId: enrollment._id,
+    status: 'done',
+  }).lean();
+
+  const doneSet = new Set(doneList.map((d) => d.subject));
+  const pending = order.find((s) => !doneSet.has(s));
+
+  return pending || order[0];
+};
+
+/**
+ * GET /api/student/next-step
+ *
+ * Returns the "next step" for the logged-in student:
+ * - enrollment + course info
+ * - nextSubject
+ * - few upcoming sessions for that subject
+ * - simple validity meta
+ */
 router.get('/student/next-step', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const courseId = req.query.courseId || null;
-    const now = new Date();
+    const user = req.user || {};
+    const userId = user.id || user._id;
 
-    let enrollment = null;
-    if (courseId) enrollment = await Enrollment.findOne({ userId, courseId });
-    else enrollment = await Enrollment.findOne({ userId }).sort({ updatedAt: -1 });
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authenticated',
+      });
+    }
 
-    if (!enrollment) return res.json({ success:true, hasEnrollment:false });
+    const { courseId: courseIdFromQuery } = req.query;
+
+    let enrollmentQuery = { userId };
+    if (courseIdFromQuery) {
+      enrollmentQuery.courseId = courseIdFromQuery;
+    }
+
+    // Most recent active enrollment
+    let enrollment = await Enrollment.findOne(enrollmentQuery).sort({ updatedAt: -1 });
+    if (!enrollment && !courseIdFromQuery) {
+      // fallback: any enrollment for user
+      enrollment = await Enrollment.findOne({ userId }).sort({ updatedAt: -1 });
+    }
+
+    if (!enrollment) {
+      return res.json({
+        success: true,
+        enrollment: null,
+        course: null,
+        nextSubject: null,
+        sessions: [],
+        upcomingSessions: [],
+        joinable: false,
+        validity: null,
+        message: 'No active enrollment found for this student',
+      });
+    }
 
     const course = await Course.findById(enrollment.courseId);
-    const next = await nextSubject(enrollment, course);
-    const validityOver = now > new Date(enrollment.validTill);
+    if (!course) {
+      return res.json({
+        success: true,
+        enrollment,
+        course: null,
+        nextSubject: null,
+        sessions: [],
+        upcomingSessions: [],
+        joinable: false,
+        validity: null,
+        message: 'Course not found for this enrollment',
+      });
+    }
 
-    // find master batch covering this course
-    const batch = await Batch.findOne({ courseIds: course._id }) || await Batch.findOne();
+    const now = new Date();
+    const validTill = enrollment.validTill ? new Date(enrollment.validTill) : null;
 
-    // fetch nearest sessions for the subject we want the student to work on next
-    const sessions = next && batch ? await Session.find({ subject: next, batchId: batch._id }).sort({ startAt: 1 }).limit(5) : [];
+    let validity = null;
+    if (validTill) {
+      const diffMs = validTill.getTime() - now.getTime();
+      const leftDays = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      validity = {
+        leftDays,
+        validTill,
+        expired: diffMs < 0,
+      };
+    }
 
-    // live joinable only within time window: startAt - 10m .. endAt
-    const liveWindowSession = sessions.find(s => {
-      const startWindow = new Date(new Date(s.startAt).getTime() - 10 * 60 * 1000);
-      const end = new Date(s.endAt);
-      return now >= startWindow && now <= end;
-    }) || null;
+    const nextSubject = await getNextSubject(enrollment, course);
 
-    const joinable = !!(
-      enrollment.status === 'active' &&
-      next &&
-      batch &&
-      batch.currentSubject === next &&
-      !validityOver &&
-      liveWindowSession
-    );
+    // Find a batch that covers this course
+    let batch = await Batch.findOne({ courseIds: course._id });
+    if (!batch) {
+      batch = await Batch.findOne();
+    }
 
-    const resp = {
-      success:true,
-      enrollment:{ id: enrollment._id, status: enrollment.status, validTill: enrollment.validTill, courseId: String(enrollment.courseId) },
-      course:{ id: String(course._id), name: course.name, startSubject: course.startSubject, subjects: course.subjects },
-      nextSubject: next,
-      batch: batch ? { id: String(batch._id), name: batch.name, currentSubject: batch.currentSubject } : null,
+    let sessions = [];
+    if (batch && nextSubject) {
+      sessions = await Session.find({
+        batchId: batch._id,
+        subject: nextSubject,
+      })
+        .sort({ startAt: 1 })
+        .limit(5)
+        .lean();
+    }
+
+    const mappedSessions = (sessions || []).map((s) => ({
+      id: s._id,
+      startAt: s.startAt,
+      endAt: s.endAt,
+      joinUrl: s.joinUrl,
+      recordingUrl: s.recordingUrl || null,
+    }));
+
+    // Simple "joinable" flag: if the first session is within 10 minutes before start
+    let joinable = false;
+    if (mappedSessions.length > 0) {
+      const first = mappedSessions[0];
+      if (first.startAt) {
+        const diffMinutes = (new Date(first.startAt).getTime() - now.getTime()) / (1000 * 60);
+        // e.g. allow join from -10 to +120 minutes around the start time
+        if (diffMinutes <= 10 && diffMinutes >= -120) {
+          joinable = true;
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      enrollment: {
+        _id: enrollment._id,
+        courseId: enrollment.courseId,
+        validTill: enrollment.validTill,
+        status: enrollment.status,
+      },
+      course: {
+        _id: course._id,
+        name: course.name,
+      },
+      nextSubject,
+      sessions: mappedSessions,
+      upcomingSessions: mappedSessions,
       joinable,
-      validityOver,
-      validity: { validTill: enrollment.validTill, leftDays: Math.max(0, Math.ceil((new Date(enrollment.validTill) - now) / (1000*60*60*24))) },
-      session: liveWindowSession ? { id:String(liveWindowSession._id), startAt: liveWindowSession.startAt, endAt: liveWindowSession.endAt, joinUrl: liveWindowSession.joinUrl } : null,
-      sessions: sessions.map(s => ({ id:String(s._id), startAt:s.startAt, endAt:s.endAt, joinUrl:s.joinUrl, recordingUrl:s.recordingUrl }))
-    };
-
-    return res.json(resp);
+      validity,
+    });
   } catch (e) {
     console.error('next-step error', e);
-    return res.status(500).json({ success:false, message:e.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to calculate next step',
+      error: e.message,
+    });
   }
 });
 
-router.get('/batch/sessions', authMiddleware, async (req, res) => {
-  try {
-    const subject = req.query.subject;
-    const batchId = req.query.batchId || null;
-    const q = {};
-    if (subject) q.subject = subject;
-    if (batchId) q.batchId = batchId;
-    const sessions = await Session.find(q).sort({ startAt: 1 }).limit(20);
-    res.json({ success:true, items: sessions });
-  } catch (e) {
-    res.status(500).json({ success:false, message:e.message });
-  }
-});
-
+/**
+ * Update subject progress (keep from original file)
+ * PATCH /api/progress/:id
+ */
 router.patch('/progress/:id', authMiddleware, async (req, res) => {
   try {
     const { status } = req.body;
-    const allowed = ['pending','done'];
-    if (!allowed.includes(status)) return res.status(400).json({ success:false, message:'Invalid status' });
-    const item = await SubjectProgress.findByIdAndUpdate(req.params.id, { status }, { new:true });
-    res.json({ success:true, item });
+    const allowed = ['pending', 'done'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+    const item = await SubjectProgress.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    return res.json({ success: true, item });
   } catch (e) {
-    res.status(500).json({ success:false, message:e.message });
+    console.error('next-step progress error', e);
+    return res.status(500).json({ success: false, message: e.message });
   }
 });
 

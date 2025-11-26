@@ -638,20 +638,26 @@ app.get("/api/dev-payment/my-courses", async (_req, res) => {
 
 /* -------------------- Routes (safe mount, no cuts, de-dup) -------------------- */
 const mounted = new Set();
+
 const safeUse = (mountPath, routerPath) => {
-  if (mounted.has(mountPath)) {
+  // ab unique key mountPath + routerPath ka combination hai
+  const key = `${mountPath}:${routerPath}`;
+
+  if (mounted.has(key)) {
     console.log(`ℹ️ Skipping duplicate mount of ${mountPath} (${routerPath})`);
     return;
   }
+
   try {
     const router = require(routerPath);
     app.use(mountPath, router);
-    mounted.add(mountPath);
+    mounted.add(key);
     console.log(`✅ Mounted ${mountPath} from ${routerPath}`);
   } catch (e) {
     console.log(`⚠️ Skipped ${mountPath} (${routerPath}) -> ${e.message}`);
   }
 };
+
 
 /* Original mounts preserved (nothing removed) */
 safeUse("/api/auth/email", "./routes/authEmailRoutes");

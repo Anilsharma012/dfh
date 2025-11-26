@@ -85,7 +85,12 @@ const MyCourses = () => {
             <div className="mc-thumb" style={{ backgroundImage: thumb ? `url(${thumb})` : undefined }} />
             <div className="mc-title">{title}</div>
             <div className="mc-status">unlocked</div>
-            <button className="mc-start" onClick={() => navigate(`/course/${course?._id || course}`)}>Start Learning</button>
+          <button
+  className="mc-start"
+  onClick={() => navigate(`/student/course-content/${id}`)}
+>
+  Start Learning
+</button>
           </div>
         );
       })}
